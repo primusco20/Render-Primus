@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Owner Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<style>
+  :root {
+    --bg: #14161a;
+    --panel: #1c1f26;
+    --panel-raised: #22252d;
+    --line: #2a2e37;
+    --text: #ece9e2;
+    --text-sub: #8b909c;
+    --brass: #c08a3e;
+    --brass-light: #d9a25a;
+    --good: #4c9a6a;
+    --bad: #c0533e;
+    --radius: 10px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--text);
+    font-family: 'Inter', system-ui, sans-serif; font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, .display { font-family: 'Fraunces', serif; font-weight: 500; letter-spacing: 0.01em; }
+  button { font-family: inherit; }
+  a { color: var(--brass-light); }
+  ::selection { background: var(--brass); color: #14161a; }
+
+  /* ---------- Login screen ---------- */
+  #loginScreen {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(192,138,62,0.10), transparent 60%),
+      var(--bg);
+  }
+  .login-card {
+    width: 100%; max-width: 380px; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 14px; padding: 34px 30px;
+  }
+  .login-mark { display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px; }
+  .login-mark .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--brass); }
+  .login-title { font-size: 1.5rem; margin: 0 0 2px; }
+  .login-sub { color: var(--text-sub); font-size: 0.82rem; margin: 0 0 26px; line-height: 1.5; }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 0.72rem; color: var(--text-sub); margin-bottom: 6px; }
+  .field input, .field select {
+    width: 100%; background: #14161a; border: 1px solid var(--line); color: var(--text);
+    border-radius: 8px; padding: 10px 12px; font-size: 0.88rem; font-family: inherit;
+  }
+  .field input:focus, .field select:focus { outline: none; border-color: var(--brass); }
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    background: var(--brass); color: #17130a; border: none; border-radius: 8px;
+    padding: 11px 18px; font-size: 0.86rem; font-weight: 600; cursor: pointer;
+    width: 100%; transition: background 0.15s ease;
+  }
+  .btn:hover { background: var(--brass-light); }
+  .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-outline {
+    background: transparent; color: var(--text); border: 1px solid var(--line); font-weight: 500;
+  }
+  .btn-outline:hover { border-color: var(--text-sub); background: rgba(255,255,255,0.02); }
+  .btn-danger { background: var(--bad); color: #fff; }
+  .btn-danger:hover { background: #d05e46; }
+  .btn-row { display: flex; gap: 8px; }
+  .btn-row .btn { flex: 1; }
+  .err-msg { color: var(--bad); font-size: 0.78rem; margin-top: 10px; display: none; }
+  .ok-msg { color: var(--good); font-size: 0.78rem; margin-top: 10px; display: none; }
+
+  .face-frame {
+    position: relative; width: 220px; aspect-ratio: 1/1; margin: 4px auto 16px;
+    border-radius: 50%; overflow: hidden; background: #0f1114; border: 1px solid var(--line);
+  }
+  .face-frame video { width: 100%; height: 100%; object-fit: cover; display: none; }
+  .face-frame .idle { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-sub); font-size: 0.72rem; text-align: center; padding: 10px; }
+  .face-status { text-align: center; font-size: 0.78rem; color: var(--text-sub); margin-bottom: 14px; }
+
+  /* ---------- App shell ---------- */
+  #appShell { display: none; min-height: 100vh; }
+  #appShell.active { display: flex; }
+  .sidebar {
+    width: 220px; flex-shrink: 0; background: var(--panel); border-right: 1px solid var(--line);
+    display: flex; flex-direction: column; padding: 22px 14px;
+  }
+  .sidebar .brand { display: flex; align-items: center; gap: 8px; padding: 0 8px 20px; }
+  .sidebar .brand .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--brass); }
+  .sidebar .brand-name { font-family: 'Fraunces', serif; font-size: 1.05rem; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px;
+    color: var(--text-sub); font-size: 0.85rem; cursor: pointer; margin-bottom: 2px;
+    border: none; background: none; width: 100%; text-align: left; font-family: inherit;
+  }
+  .nav-item:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+  .nav-item.active { color: var(--text); background: var(--panel-raised); border-left: 2px solid var(--brass); padding-left: 10px; }
+  .nav-item .badge {
+    margin-left: auto; background: var(--brass); color: #17130a; font-size: 0.65rem; font-weight: 700;
+    border-radius: 10px; padding: 1px 6px;
+  }
+  .sidebar-foot { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); }
+
+  .main { flex: 1; padding: 30px 40px; max-width: 980px; overflow-y: auto; height: 100vh; }
+  .page-head { margin-bottom: 26px; }
+  .page-head h1 { font-size: 1.6rem; margin: 0 0 4px; }
+  .page-head p { color: var(--text-sub); font-size: 0.85rem; margin: 0; max-width: 560px; line-height: 1.5; }
+
+  .stat-row { display: flex; gap: 14px; margin-bottom: 30px; flex-wrap: wrap; }
+  .stat { flex: 1; min-width: 140px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+  .stat .num { font-family: 'Fraunces', serif; font-size: 1.8rem; line-height: 1; }
+  .stat .lbl { color: var(--text-sub); font-size: 0.74rem; margin-top: 6px; }
+
+  .section-title { font-size: 0.72rem; text-transform: none; color: var(--text-sub); margin: 26px 0 10px; letter-spacing: 0.02em; }
+  .ledger { border-top: 1px solid var(--line); }
+  .ledger-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 4px;
+    border-bottom: 1px solid var(--line);
+  }
+  .ledger-row .primary { font-weight: 500; }
+  .ledger-row .secondary { color: var(--text-sub); font-size: 0.76rem; }
+  .pill {
+    font-size: 0.68rem; padding: 2px 9px; border-radius: 20px; border: 1px solid var(--line); color: var(--text-sub);
+    white-space: nowrap;
+  }
+  .pill.live { color: var(--good); border-color: rgba(76,154,106,0.4); }
+  .pill.pending { color: var(--brass-light); border-color: rgba(192,138,62,0.4); }
+  .pill.off { color: var(--text-sub); }
+  .row-spacer { flex: 1; }
+  .small-btn {
+    background: transparent; border: 1px solid var(--line); color: var(--text); border-radius: 6px;
+    padding: 5px 11px; font-size: 0.72rem; cursor: pointer; font-family: inherit;
+  }
+  .small-btn:hover { border-color: var(--brass); color: var(--brass-light); }
+  .small-btn.danger:hover { border-color: var(--bad); color: #e07a63; }
+  select.inline-select {
+    background: #14161a; border: 1px solid var(--line); color: var(--text); border-radius: 6px;
+    padding: 5px 8px; font-size: 0.74rem; font-family: inherit;
+  }
+  .empty-note { color: var(--text-sub); font-size: 0.82rem; padding: 18px 4px; }
+
+  .settings-block { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; margin-bottom: 18px; max-width: 480px; }
+  .settings-block h3 { margin: 0 0 4px; font-size: 1rem; }
+  .settings-block .hint { color: var(--text-sub); font-size: 0.76rem; margin: 0 0 16px; line-height: 1.5; }
+
+  code { background: #0f1114; padding: 1px 5px; border-radius: 4px; font-size: 0.78rem; }
+  .toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: var(--panel-raised); border: 1px solid var(--line); color: var(--text);
+    padding: 10px 18px; border-radius: 8px; font-size: 0.82rem; opacity: 0; pointer-events: none;
+    transition: opacity 0.2s ease; z-index: 100;
+  }
+  .toast.show { opacity: 1; }
+
+  @media (max-width: 720px) {
+    #appShell.active { flex-direction: column; }
+    .sidebar { width: 100%; flex-direction: row; overflow-x: auto; align-items: center; padding: 10px 12px; }
+    .sidebar .brand { display: none; }
+    .nav-item { white-space: nowrap; margin-bottom: 0; }
+    .nav-item.active { border-left: none; border-bottom: 2px solid var(--brass); padding-left: 12px; }
+    .sidebar-foot { margin-top: 0; padding-top: 0; border-top: none; margin-left: 8px; }
+    .main { padding: 22px 18px; height: auto; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= LOGIN ================= -->
+<div id="loginScreen">
+  <div class="login-card">
+
+    <div id="loginStepPassword">
+      <div class="login-mark"><span class="dot"></span><span class="brand-name display">Owner Console</span></div>
+      <p class="login-sub">Sign in with the shop's admin password. You'll verify with Face ID next.</p>
+      <div class="field">
+        <label for="ownerPassword">Password</label>
+        <input type="password" id="ownerPassword" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn" id="ownerPwSubmitBtn" onclick="submitOwnerPassword()">Continue</button>
+      <div class="err-msg" id="ownerPwErr"></div>
+    </div>
+
+    <div id="loginStepFace" style="display:none;">
+      <div class="login-mark"><span class="dot"></span><span class="brand-name display">Face ID</span></div>
+      <p class="login-sub" id="faceIntroText">Confirming it's really the owner.</p>
+      <div class="face-frame">
+        <video id="faceVideo" autoplay muted playsinline></video>
+        <div class="idle" id="faceIdle">Starting camera…</div>
+      </div>
+      <p class="face-status" id="faceStatus"></p>
+      <div class="btn-row">
+        <button class="btn btn-outline" onclick="cancelFaceLogin()">Back</button>
+        <button class="btn" id="faceScanBtn" onclick="captureFaceLogin()" disabled>Scan Face</button>
+      </div>
+      <div class="err-msg" id="faceErr"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ================= APP SHELL ================= -->
+<div id="appShell">
+  <div class="sidebar">
+    <div class="brand"><span class="dot"></span><span class="brand-name" id="sidebarBrand">Owner Console</span></div>
+    <button class="nav-item active" data-page="overview" onclick="goToPage('overview')">Overview</button>
+    <button class="nav-item" data-page="approvals" onclick="goToPage('approvals')">Approvals<span class="badge" id="navApprovalsBadge" style="display:none;"></span></button>
+    <button class="nav-item" data-page="team" onclick="goToPage('team')">Team &amp; Roles</button>
+    <button class="nav-item" data-page="calls" onclick="goToPage('calls')">Live Calls</button>
+    <button class="nav-item" data-page="reviews" onclick="goToPage('reviews')">Reviews</button>
+    <button class="nav-item" data-page="security" onclick="goToPage('security')">Security</button>
+    <button class="nav-item" data-page="settings" onclick="goToPage('settings')">Settings</button>
+    <div class="sidebar-foot">
+      <button class="small-btn" style="width:100%;" onclick="ownerLogout()">Log out</button>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- OVERVIEW -->
+    <div class="page" data-page="overview">
+      <div class="page-head">
+        <h1>Overview</h1>
+        <p>A quick read on what needs your attention right now.</p>
+      </div>
+      <div class="stat-row">
+        <div class="stat"><div class="num" id="statPending">0</div><div class="lbl">Pending approvals</div></div>
+        <div class="stat"><div class="num" id="statLive">0</div><div class="lbl">Agents live now</div></div>
+        <div class="stat"><div class="num" id="statTeam">0</div><div class="lbl">Team members</div></div>
+        <div class="stat"><div class="num" id="statReviews">0</div><div class="lbl">Reviews on file</div></div>
+      </div>
+      <div class="section-title">Needs approval</div>
+      <div class="ledger" id="overviewApprovalsList"></div>
+    </div>
+
+    <!-- APPROVALS -->
+    <div class="page" data-page="approvals" style="display:none;">
+      <div class="page-head">
+        <h1>Approvals</h1>
+        <p>Barber, Support, and Admin sign-ups all land here first. Nothing they created is visible or usable anywhere else until you approve it — Support accounts can't even log in until then.</p>
+      </div>
+      <div class="ledger" id="approvalsList"></div>
+    </div>
+
+    <!-- TEAM & ROLES -->
+    <div class="page" data-page="team" style="display:none;">
+      <div class="page-head">
+        <h1>Team &amp; Roles</h1>
+        <p>Once someone signs up they can't change their own role — this is the only place a Barber, Support, or Admin assignment can be changed.</p>
+      </div>
+      <div class="ledger" id="teamList"></div>
+    </div>
+
+    <!-- LIVE CALLS -->
+    <div class="page" data-page="calls" style="display:none;">
+      <div class="page-head">
+        <h1>Live Calls</h1>
+        <p>There's no single shared call line anymore — a customer tapping "Call now" rings whichever of these Support agents currently has their console open and set to Live. This list refreshes automatically.</p>
+      </div>
+      <div class="settings-block" style="max-width:320px;">
+        <h3>Ring duration</h3>
+        <p class="hint">How long a customer's call rings one agent before trying the next Live agent (or giving up, if that was the last one).</p>
+        <div class="field"><label>Minutes</label><input type="number" id="setCallWaitMinutes" min="0.5" max="15" step="0.5"></div>
+        <button class="btn" style="width:auto;" onclick="saveCallWaitMinutes()">Save</button>
+        <div class="ok-msg" id="setCallWaitOk">Saved.</div>
+      </div>
+      <div class="section-title">Agents</div>
+      <div class="ledger" id="callsList"></div>
+    </div>
+
+    <!-- REVIEWS -->
+    <div class="page" data-page="reviews" style="display:none;">
+      <div class="page-head">
+        <h1>Reviews</h1>
+        <p>Moderate what customers see on the site. Deleting a review here removes it from the public page immediately.</p>
+      </div>
+      <div class="ledger" id="reviewsList"></div>
+    </div>
+
+    <!-- SECURITY -->
+    <div class="page" data-page="security" style="display:none;">
+      <div class="page-head">
+        <h1>Security</h1>
+        <p>Your password is never displayed. Reset it here — you'll need to pass a Face ID check first.</p>
+      </div>
+      <div class="settings-block" id="securityIdleBlock">
+        <h3>Admin password</h3>
+        <p class="hint">This is the one password that gates both this Owner Console and the Admin Panel on the main site.</p>
+        <button class="btn" style="width:auto;" onclick="startSecurityReset()">Reset Password</button>
+      </div>
+      <div class="settings-block" id="securityFaceBlock" style="display:none;">
+        <h3>Verify it's you</h3>
+        <div class="face-frame" style="margin-left:0;">
+          <video id="secFaceVideo" autoplay muted playsinline></video>
+          <div class="idle" id="secFaceIdle">Starting camera…</div>
+        </div>
+        <p class="face-status" id="secFaceStatus" style="text-align:left;"></p>
+        <div class="btn-row">
+          <button class="btn btn-outline" onclick="cancelSecurityReset()">Cancel</button>
+          <button class="btn" id="secFaceScanBtn" onclick="captureSecurityFaceScan()" disabled>Scan Face</button>
+        </div>
+        <div class="err-msg" id="secFaceErr"></div>
+      </div>
+      <div class="settings-block" id="securityNewPwBlock" style="display:none;">
+        <h3>Set a new password</h3>
+        <div class="field"><label>New password</label><input type="password" id="secNewPw"></div>
+        <div class="field"><label>Confirm new password</label><input type="password" id="secNewPw2"></div>
+        <button class="btn" onclick="saveSecurityNewPassword()">Save New Password</button>
+        <div class="err-msg" id="secNewPwErr"></div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div class="page" data-page="settings" style="display:none;">
+      <div class="page-head">
+        <h1>Settings</h1>
+        <p>The essentials. For gallery, bookings, memberships, and payment setup, use the Admin Panel on the main site.</p>
+      </div>
+      <div class="settings-block">
+        <h3>Business</h3>
+        <div class="field"><label>Shop name</label><input type="text" id="setBrandName"></div>
+        <div class="field"><label>Contact email</label><input type="email" id="setContactEmail"></div>
+        <div class="field"><label>Contact phone</label><input type="text" id="setContactPhone"></div>
+        <button class="btn" style="width:auto;" onclick="saveSettingsBusiness()">Save</button>
+        <div class="ok-msg" id="setBusinessOk">Saved.</div>
+      </div>
+      <div class="settings-block">
+        <h3>Hours</h3>
+        <div id="hoursRows"></div>
+        <button class="small-btn" style="margin-bottom:12px;" onclick="addHoursRow()">+ Add row</button>
+        <br>
+        <button class="btn" style="width:auto;" onclick="saveSettingsHours()">Save</button>
+        <div class="ok-msg" id="setHoursOk">Saved.</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  // ==========================================================================
+  // Owner Console — a dedicated site for the shop owner, separate from the
+  // customer-facing page and the in-page Admin Panel. It reads and writes the
+  // exact same shared state (via /api/state and /api/admin/state) as the main
+  // site, so anything approved, edited, or reset here takes effect everywhere.
+  //
+  // IMPORTANT — about the login: this console is gated by the same admin
+  // password the main site's Admin Panel already uses, because that is the
+  // only credential the backend actually verifies (via /api/admin/state).
+  // On top of that shared password, a mandatory Face ID scan is required
+  // every time before the dashboard unlocks — that second factor is what
+  // makes this a dedicated, owner-only entry point rather than just another
+  // door into the same panel. If you want a fully independent Owner password
+  // (verified server-side, separate from the Admin Panel's), that needs a
+  // small addition to your backend — ask and it can be spec'd out.
+  // ==========================================================================
+
+  const FACE_MATCH_THRESHOLD = 0.55;
+  const FACE_MODEL_URL = 'https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights';
+  const LIVE_STALE_MS = 45000;
+
+  let appSettings = null;
+  let ownerPasswordCache = '';
+  let faceModelsLoaded = false;
+  let loginFaceStream = null;
+  let secFaceStream = null;
+
+  function toast(msg) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 2200);
+  }
+
+  async function ensureFaceModelsLoaded() {
+    if (faceModelsLoaded) return true;
+    try {
+      await faceapi.nets.tinyFaceDetector.loadFromUri(FACE_MODEL_URL);
+      await faceapi.nets.faceLandmark68Net.loadFromUri(FACE_MODEL_URL);
+      await faceapi.nets.faceRecognitionNet.loadFromUri(FACE_MODEL_URL);
+      faceModelsLoaded = true;
+      return true;
+    } catch (e) {
+      console.error('Failed to load face-api models:', e);
+      return false;
+    }
+  }
+
+  // ---------------- Step 1: password ----------------
+  async function submitOwnerPassword() {
+    const pwd = document.getElementById('ownerPassword').value;
+    const errEl = document.getElementById('ownerPwErr');
+    errEl.style.display = 'none';
+    if (!pwd) return;
+    const btn = document.getElementById('ownerPwSubmitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Checking…';
+    try {
+      const resp = await fetch('/api/admin/state', { headers: { 'x-admin-password': pwd } });
+      if (!resp.ok) {
+        if (resp.status === 401 || resp.status === 403) {
+          errEl.textContent = 'Incorrect password.';
+        } else if (resp.status === 404) {
+          errEl.textContent = "Couldn't find the server's admin endpoint — make sure this page is hosted on the same site as your main page, not opened as a standalone file.";
+        } else {
+          errEl.textContent = `Server error (status ${resp.status}) — try again in a moment.`;
+        }
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Continue';
+        return;
+      }
+      appSettings = await resp.json();
+      ownerPasswordCache = pwd;
+      document.getElementById('loginStepPassword').style.display = 'none';
+      document.getElementById('loginStepFace').style.display = 'block';
+      document.getElementById('faceIntroText').textContent = appSettings.ownerFaceDescriptor
+        ? "Confirming it's really the owner."
+        : "No Face ID on file yet — this scan will set it up.";
+      startLoginFaceCamera();
+    } catch (e) {
+      errEl.textContent = "Couldn't reach the server. Check your connection and try again.";
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Continue';
+    }
+  }
+
+  async function startLoginFaceCamera() {
+    const statusEl = document.getElementById('faceStatus');
+    const scanBtn = document.getElementById('faceScanBtn');
+    const errEl = document.getElementById('faceErr');
+    errEl.style.display = 'none';
+    scanBtn.disabled = true;
+    statusEl.textContent = 'Starting camera…';
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+      loginFaceStream = stream;
+      const video = document.getElementById('faceVideo');
+      video.srcObject = stream;
+      video.style.display = 'block';
+      document.getElementById('faceIdle').style.display = 'none';
+      statusEl.textContent = 'Loading face verification model…';
+      const ok = await ensureFaceModelsLoaded();
+      if (!loginFaceStream) return;
+      statusEl.textContent = ok ? 'Center your face, then tap "Scan Face".' : 'Could not load the model — tap "Scan Face" to retry.';
+      scanBtn.disabled = false;
+    } catch (e) {
+      statusEl.textContent = e && e.name === 'NotAllowedError'
+        ? 'Camera permission denied — allow access, then retry.'
+        : 'Camera unavailable — tap "Scan Face" to retry.';
+      scanBtn.disabled = false;
+    }
+  }
+
+  function cancelFaceLogin() {
+    if (loginFaceStream) { loginFaceStream.getTracks().forEach(t => t.stop()); loginFaceStream = null; }
+    document.getElementById('faceVideo').style.display = 'none';
+    document.getElementById('faceIdle').style.display = 'flex';
+    document.getElementById('loginStepFace').style.display = 'none';
+    document.getElementById('loginStepPassword').style.display = 'block';
+    document.getElementById('ownerPwSubmitBtn').disabled = false;
+    document.getElementById('ownerPwSubmitBtn').textContent = 'Continue';
+  }
+
+  async function captureFaceLogin() {
+    const video = document.getElementById('faceVideo');
+    const statusEl = document.getElementById('faceStatus');
+    const errEl = document.getElementById('faceErr');
+    const scanBtn = document.getElementById('faceScanBtn');
+    errEl.style.display = 'none';
+    if (!video.videoWidth) { statusEl.textContent = 'Camera still starting…'; return; }
+    scanBtn.disabled = true;
+    statusEl.textContent = 'Looking for a face…';
+    try {
+      const result = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+      if (!result) {
+        statusEl.textContent = 'No face detected.';
+        errEl.textContent = 'Make sure your face is well-lit and centered, then try again.';
+        errEl.style.display = 'block';
+        scanBtn.disabled = false;
+        return;
+      }
+      const descriptor = Array.from(result.descriptor);
+      if (!appSettings.ownerFaceDescriptor) {
+        appSettings.ownerFaceDescriptor = descriptor;
+        await persistFullState();
+        finishLogin();
+        return;
+      }
+      const distance = faceapi.euclideanDistance(descriptor, appSettings.ownerFaceDescriptor);
+      if (distance <= FACE_MATCH_THRESHOLD) {
+        finishLogin();
+      } else {
+        statusEl.textContent = 'Face not recognized.';
+        errEl.textContent = "This doesn't match the Face ID on file for the owner.";
+        errEl.style.display = 'block';
+        scanBtn.disabled = false;
+      }
+    } catch (e) {
+      statusEl.textContent = 'Scan failed — try again.';
+      scanBtn.disabled = false;
+    }
+  }
+
+  function finishLogin() {
+    if (loginFaceStream) { loginFaceStream.getTracks().forEach(t => t.stop()); loginFaceStream = null; }
+    document.getElementById('loginScreen').style.display = 'none';
+    document.getElementById('appShell').classList.add('active');
+    document.getElementById('sidebarBrand').textContent = (appSettings.brandName || 'Owner Console');
+    renderAll();
+    startLiveRefresh();
+  }
+
+  function ownerLogout() {
+    stopLiveRefresh();
+    ownerPasswordCache = '';
+    appSettings = null;
+    document.getElementById('appShell').classList.remove('active');
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('loginStepFace').style.display = 'none';
+    document.getElementById('loginStepPassword').style.display = 'block';
+    document.getElementById('ownerPassword').value = '';
+    document.getElementById('ownerPwSubmitBtn').disabled = false;
+    document.getElementById('ownerPwSubmitBtn').textContent = 'Continue';
+  }
+
+  // ---------------- Persisting changes ----------------
+  async function persistFullState() {
+    try {
+      const resp = await fetch('/api/state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': ownerPasswordCache },
+        body: JSON.stringify(appSettings)
+      });
+      return resp.ok;
+    } catch (e) {
+      toast("Couldn't save — check your connection.");
+      return false;
+    }
+  }
+
+  async function refreshState() {
+    try {
+      const resp = await fetch('/api/admin/state', { headers: { 'x-admin-password': ownerPasswordCache } });
+      if (resp.ok) appSettings = await resp.json();
+    } catch (e) { /* keep showing what we already have */ }
+  }
+
+  let liveRefreshTimer = null;
+  function startLiveRefresh() {
+    stopLiveRefresh();
+    liveRefreshTimer = setInterval(async () => {
+      await refreshState();
+      renderAll();
+    }, 15000);
+  }
+  function stopLiveRefresh() {
+    if (liveRefreshTimer) { clearInterval(liveRefreshTimer); liveRefreshTimer = null; }
+  }
+
+  // ---------------- Navigation ----------------
+  function goToPage(name) {
+    document.querySelectorAll('.page').forEach(p => p.style.display = p.dataset.page === name ? 'block' : 'none');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === name));
+  }
+
+  // ---------------- Rendering ----------------
+  function accounts() { return appSettings.barberAccounts || []; }
+
+  function renderAll() {
+    renderOverview();
+    renderApprovals();
+    renderTeam();
+    renderCalls();
+    renderReviews();
+    populateSettingsForm();
+  }
+
+  function roleLabel(acct) {
+    return acct.role === 'staff' ? acct.position : (acct.position || 'Barber');
+  }
+
+  function renderOverview() {
+    const pending = accounts().filter(a => a.approved === false);
+    const now = Date.now();
+    const live = accounts().filter(a => a.role === 'staff' && a.position === 'Support' && a.isLive && a.liveHeartbeat && (now - a.liveHeartbeat) < LIVE_STALE_MS);
+    document.getElementById('statPending').textContent = pending.length;
+    document.getElementById('statLive').textContent = live.length;
+    document.getElementById('statTeam').textContent = accounts().length;
+    document.getElementById('statReviews').textContent = (appSettings.reviews || []).length;
+
+    const badge = document.getElementById('navApprovalsBadge');
+    if (pending.length) { badge.style.display = ''; badge.textContent = pending.length; } else { badge.style.display = 'none'; }
+
+    const list = document.getElementById('overviewApprovalsList');
+    if (!pending.length) {
+      list.innerHTML = '<div class="empty-note">Nothing waiting on you right now.</div>';
+      return;
+    }
+    list.innerHTML = pending.slice(0, 5).map(a => approvalRowHtml(a)).join('');
+  }
+
+  function approvalRowHtml(a) {
+    return `<div class="ledger-row">
+      <div>
+        <div class="primary">${escapeHtml(a.name)}</div>
+        <div class="secondary">${escapeHtml(a.username)} · ${escapeHtml(roleLabel(a))}</div>
+      </div>
+      <div class="row-spacer"></div>
+      <button class="small-btn" onclick="approveAccount('${a.id}')">Approve</button>
+      <button class="small-btn danger" onclick="rejectAccount('${a.id}')">Reject</button>
+    </div>`;
+  }
+
+  function renderApprovals() {
+    const pending = accounts().filter(a => a.approved === false);
+    const list = document.getElementById('approvalsList');
+    if (!pending.length) {
+      list.innerHTML = '<div class="empty-note">No pending sign-ups.</div>';
+      return;
+    }
+    list.innerHTML = pending.map(a => approvalRowHtml(a)).join('');
+  }
+
+  async function approveAccount(id) {
+    const a = accounts().find(x => x.id === id);
+    if (!a) return;
+    a.approved = true;
+    a.active = true;
+    await persistFullState();
+    renderAll();
+    toast(`${a.name} approved.`);
+  }
+
+  async function rejectAccount(id) {
+    const a = accounts().find(x => x.id === id);
+    if (!a) return;
+    if (!confirm(`Reject and delete the sign-up for ${a.name}? This can't be undone.`)) return;
+    appSettings.barberAccounts = accounts().filter(x => x.id !== id);
+    await persistFullState();
+    renderAll();
+    toast('Sign-up rejected.');
+  }
+
+  function renderTeam() {
+    const list = document.getElementById('teamList');
+    if (!accounts().length) { list.innerHTML = '<div class="empty-note">No team accounts yet.</div>'; return; }
+    list.innerHTML = accounts().map(a => {
+      const now = Date.now();
+      const isLiveAgent = a.role === 'staff' && a.position === 'Support';
+      const live = isLiveAgent && a.isLive && a.liveHeartbeat && (now - a.liveHeartbeat) < LIVE_STALE_MS;
+      let statusPill = '';
+      if (a.approved === false) statusPill = '<span class="pill pending">Pending</span>';
+      else if (isLiveAgent) statusPill = live ? '<span class="pill live">● Live</span>' : '<span class="pill off">Offline</span>';
+      return `<div class="ledger-row">
+        <div>
+          <div class="primary">${escapeHtml(a.name)}</div>
+          <div class="secondary">${escapeHtml(a.username)} · ${escapeHtml(a.status || 'Active')}</div>
+        </div>
+        <div class="row-spacer"></div>
+        ${statusPill}
+        <select class="inline-select" onchange="changeAccountRole('${a.id}', this.value)">
+          <option value="barber" ${a.role !== 'staff' ? 'selected' : ''}>Barber</option>
+          <option value="staff:Support" ${a.role === 'staff' && a.position === 'Support' ? 'selected' : ''}>Support</option>
+          <option value="staff:Admin" ${a.role === 'staff' && a.position === 'Admin' ? 'selected' : ''}>Admin (staff)</option>
+        </select>
+        <button class="small-btn danger" onclick="deleteAccount('${a.id}')">Delete</button>
+      </div>`;
+    }).join('');
+  }
+
+  async function changeAccountRole(id, value) {
+    const a = accounts().find(x => x.id === id);
+    if (!a) return;
+    const wasSupport = a.role === 'staff' && a.position === 'Support';
+    if (value === 'barber') {
+      a.role = 'barber';
+      a.position = 'Barber';
+    } else {
+      const [, position] = value.split(':');
+      a.role = 'staff';
+      a.position = position;
+    }
+    const willBeSupport = a.role === 'staff' && a.position === 'Support';
+    if (wasSupport && !willBeSupport) { a.supportPeerId = ''; a.isLive = false; a.liveHeartbeat = 0; }
+    if (!wasSupport && willBeSupport) { a.approved = false; }
+    await persistFullState();
+    renderAll();
+    toast(`${a.name}'s role updated.`);
+  }
+
+  async function deleteAccount(id) {
+    const a = accounts().find(x => x.id === id);
+    if (!a) return;
+    if (!confirm(`Delete the account for ${a.name}? This can't be undone.`)) return;
+    appSettings.barberAccounts = accounts().filter(x => x.id !== id);
+    await persistFullState();
+    renderAll();
+    toast('Account deleted.');
+  }
+
+  function renderCalls() {
+    const wait = document.getElementById('setCallWaitMinutes');
+    if (wait && document.activeElement !== wait) wait.value = (typeof appSettings.callWaitMinutes === 'number' && appSettings.callWaitMinutes > 0) ? appSettings.callWaitMinutes : 5;
+    const now = Date.now();
+    const agents = accounts().filter(a => a.role === 'staff' && a.position === 'Support');
+    const list = document.getElementById('callsList');
+    if (!agents.length) { list.innerHTML = '<div class="empty-note">No Support agents have signed up yet.</div>'; return; }
+    list.innerHTML = agents.map(a => {
+      const live = a.approved !== false && a.active !== false && a.status !== 'Inactive' && a.isLive && a.liveHeartbeat && (now - a.liveHeartbeat) < LIVE_STALE_MS;
+      return `<div class="ledger-row">
+        <div>
+          <div class="primary">${escapeHtml(a.name)}</div>
+          <div class="secondary">${a.approved === false ? 'Pending approval' : escapeHtml(a.status || 'Active')}</div>
+        </div>
+        <div class="row-spacer"></div>
+        <span class="pill ${live ? 'live' : 'off'}">${live ? '● Live — accepting calls' : '○ Offline'}</span>
+      </div>`;
+    }).join('');
+  }
+
+  async function saveCallWaitMinutes() {
+    const val = parseFloat(document.getElementById('setCallWaitMinutes').value);
+    appSettings.callWaitMinutes = (!isNaN(val) && val > 0) ? val : 5;
+    const ok = await persistFullState();
+    if (ok) {
+      document.getElementById('setCallWaitOk').style.display = 'block';
+      setTimeout(() => document.getElementById('setCallWaitOk').style.display = 'none', 2000);
+    }
+  }
+
+  function renderReviews() {
+    const reviews = appSettings.reviews || [];
+    const list = document.getElementById('reviewsList');
+    if (!reviews.length) { list.innerHTML = '<div class="empty-note">No reviews on file.</div>'; return; }
+    list.innerHTML = reviews.map((r, i) => `<div class="ledger-row" style="align-items:flex-start;">
+        <div>
+          <div class="primary">${escapeHtml(r.author)} — ${'★'.repeat(r.rating || 0)}${'☆'.repeat(5 - (r.rating || 0))}</div>
+          <div class="secondary" style="max-width:480px;">${escapeHtml(r.comment || '')}</div>
+          <div class="secondary">${escapeHtml(r.date || '')}${r.barber ? ' · ' + escapeHtml(r.barber) : ''}</div>
+        </div>
+        <div class="row-spacer"></div>
+        <button class="small-btn danger" onclick="deleteReview(${i})">Delete</button>
+      </div>`).join('');
+  }
+
+  async function deleteReview(index) {
+    if (!confirm('Delete this review? It will disappear from the public site.')) return;
+    appSettings.reviews.splice(index, 1);
+    await persistFullState();
+    renderAll();
+    toast('Review deleted.');
+  }
+
+  // ---------------- Security: Face ID-gated password reset ----------------
+  function startSecurityReset() {
+    document.getElementById('securityIdleBlock').style.display = 'none';
+    document.getElementById('securityNewPwBlock').style.display = 'none';
+    document.getElementById('securityFaceBlock').style.display = 'block';
+    startSecFaceCamera();
+  }
+
+  function cancelSecurityReset() {
+    if (secFaceStream) { secFaceStream.getTracks().forEach(t => t.stop()); secFaceStream = null; }
+    document.getElementById('secFaceVideo').style.display = 'none';
+    document.getElementById('secFaceIdle').style.display = 'flex';
+    document.getElementById('securityFaceBlock').style.display = 'none';
+    document.getElementById('securityNewPwBlock').style.display = 'none';
+    document.getElementById('securityIdleBlock').style.display = 'block';
+  }
+
+  async function startSecFaceCamera() {
+    const statusEl = document.getElementById('secFaceStatus');
+    const scanBtn = document.getElementById('secFaceScanBtn');
+    const errEl = document.getElementById('secFaceErr');
+    errEl.style.display = 'none';
+    scanBtn.disabled = true;
+    statusEl.textContent = 'Starting camera…';
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' }, audio: false });
+      secFaceStream = stream;
+      const video = document.getElementById('secFaceVideo');
+      video.srcObject = stream;
+      video.style.display = 'block';
+      document.getElementById('secFaceIdle').style.display = 'none';
+      statusEl.textContent = 'Loading model…';
+      const ok = await ensureFaceModelsLoaded();
+      if (!secFaceStream) return;
+      statusEl.textContent = ok ? 'Center your face, then tap "Scan Face".' : 'Could not load the model — retry.';
+      scanBtn.disabled = false;
+    } catch (e) {
+      statusEl.textContent = 'Camera unavailable — retry.';
+      scanBtn.disabled = false;
+    }
+  }
+
+  async function captureSecurityFaceScan() {
+    const video = document.getElementById('secFaceVideo');
+    const statusEl = document.getElementById('secFaceStatus');
+    const errEl = document.getElementById('secFaceErr');
+    const scanBtn = document.getElementById('secFaceScanBtn');
+    errEl.style.display = 'none';
+    if (!video.videoWidth) { statusEl.textContent = 'Camera still starting…'; return; }
+    scanBtn.disabled = true;
+    statusEl.textContent = 'Looking for a face…';
+    try {
+      const result = await faceapi.detectSingleFace(video, new faceapi.TinyFaceDetectorOptions()).withFaceLandmarks().withFaceDescriptor();
+      if (!result) {
+        statusEl.textContent = 'No face detected.';
+        errEl.textContent = 'Try again with better lighting.';
+        errEl.style.display = 'block';
+        scanBtn.disabled = false;
+        return;
+      }
+      const descriptor = Array.from(result.descriptor);
+      const matches = !appSettings.ownerFaceDescriptor || faceapi.euclideanDistance(descriptor, appSettings.ownerFaceDescriptor) <= FACE_MATCH_THRESHOLD;
+      if (matches) {
+        if (secFaceStream) { secFaceStream.getTracks().forEach(t => t.stop()); secFaceStream = null; }
+        document.getElementById('securityFaceBlock').style.display = 'none';
+        document.getElementById('securityNewPwBlock').style.display = 'block';
+        document.getElementById('secNewPw').value = '';
+        document.getElementById('secNewPw2').value = '';
+      } else {
+        statusEl.textContent = 'Face not recognized.';
+        errEl.textContent = "This doesn't match the owner's Face ID on file.";
+        errEl.style.display = 'block';
+        scanBtn.disabled = false;
+      }
+    } catch (e) {
+      statusEl.textContent = 'Scan failed — try again.';
+      scanBtn.disabled = false;
+    }
+  }
+
+  async function saveSecurityNewPassword() {
+    const pw = document.getElementById('secNewPw').value;
+    const pw2 = document.getElementById('secNewPw2').value;
+    const errEl = document.getElementById('secNewPwErr');
+    errEl.style.display = 'none';
+    if (!pw || pw.length < 6) { errEl.textContent = 'Password must be at least 6 characters.'; errEl.style.display = 'block'; return; }
+    if (pw !== pw2) { errEl.textContent = 'Passwords do not match.'; errEl.style.display = 'block'; return; }
+    appSettings.adminPassword = pw;
+    ownerPasswordCache = pw;
+    await persistFullState();
+    document.getElementById('securityNewPwBlock').style.display = 'none';
+    document.getElementById('securityIdleBlock').style.display = 'block';
+    toast('Password updated.');
+  }
+
+  // ---------------- Settings ----------------
+  function populateSettingsForm() {
+    document.getElementById('setBrandName').value = appSettings.brandName || '';
+    document.getElementById('setContactEmail').value = appSettings.contactEmail || '';
+    document.getElementById('setContactPhone').value = appSettings.contactPhone || '';
+    const rows = document.getElementById('hoursRows');
+    rows.innerHTML = '';
+    (appSettings.hours || []).forEach((h, i) => addHoursRow(h.day, h.time));
+    if (!(appSettings.hours || []).length) addHoursRow();
+  }
+
+  function addHoursRow(day, time) {
+    const rows = document.getElementById('hoursRows');
+    const div = document.createElement('div');
+    div.style.cssText = 'display:flex; gap:8px; margin-bottom:8px;';
+    div.innerHTML = `<input type="text" class="hours-day" placeholder="e.g. Monday – Friday" value="${escapeHtml(day || '')}" style="flex:1; background:#14161a; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.82rem;">
+      <input type="text" class="hours-time" placeholder="e.g. 09:00 AM – 08:00 PM" value="${escapeHtml(time || '')}" style="flex:1; background:#14161a; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.82rem;">
+      <button class="small-btn danger" onclick="this.parentElement.remove()">✕</button>`;
+    rows.appendChild(div);
+  }
+
+  async function saveSettingsBusiness() {
+    appSettings.brandName = document.getElementById('setBrandName').value.trim() || appSettings.brandName;
+    appSettings.contactEmail = document.getElementById('setContactEmail').value.trim();
+    appSettings.contactPhone = document.getElementById('setContactPhone').value.trim();
+    const ok = await persistFullState();
+    if (ok) {
+      document.getElementById('setBusinessOk').style.display = 'block';
+      document.getElementById('sidebarBrand').textContent = appSettings.brandName;
+      setTimeout(() => document.getElementById('setBusinessOk').style.display = 'none', 2000);
+    }
+  }
+
+  async function saveSettingsHours() {
+    const days = document.querySelectorAll('.hours-day');
+    const times = document.querySelectorAll('.hours-time');
+    const hours = [];
+    days.forEach((d, i) => {
+      if (d.value.trim()) hours.push({ day: d.value.trim(), time: (times[i].value || '').trim() });
+    });
+    appSettings.hours = hours;
+    const ok = await persistFullState();
+    if (ok) {
+      document.getElementById('setHoursOk').style.display = 'block';
+      setTimeout(() => document.getElementById('setHoursOk').style.display = 'none', 2000);
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str == null ? '' : str).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+
+  document.getElementById('ownerPassword').addEventListener('keydown', e => { if (e.key === 'Enter') submitOwnerPassword(); });
+</script>
+</body>
+</html>
