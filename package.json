@@ -1,0 +1,12 @@
+{
+  "name": "barbershop-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Netlify Functions backend (state storage + payments) for index.html / owner.html",
+  "dependencies": {
+    "@netlify/blobs": "^8.1.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

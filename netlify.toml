@@ -1,0 +1,16 @@
+[build]
+  # Where your static site files (index.html, owner.html, etc.) live.
+  # Change this if your files aren't at the repo root.
+  publish = "."
+  functions = "netlify/functions"
+
+[functions]
+  node_bundler = "esbuild"
+
+# Every /api/... path the front-end calls goes to the one function
+# (netlify/functions/api.js), which looks at the rest of the path to decide
+# what to do.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
