@@ -287,14 +287,51 @@
     justify-content: center;
     gap: 5px;
     height: 20px;
+    max-width: 100%;
   }
   .pm-logo {
     height: 18px;
     width: auto;
+    max-width: 100%;
     display: block;
     background: #fff;
     border-radius: 3px;
     padding: 2px 3px;
+    object-fit: contain;
+    box-sizing: border-box;
+  }
+  /* Fixed-size box for admin-uploaded merchant logos (GCash/Maya/GoTyme/Mari
+     Bank) in the customer-facing payment method picker. Unlike .pm-logo
+     above (used for the hardcoded Visa/Mastercard/PayPal icons, which are
+     already pre-sized to fit), an uploaded logo can be any shape or
+     resolution — a wide wordmark, a huge photo, whatever the shop owner had
+     on hand. Without a fixed box + object-fit:contain, "height:18px;
+     width:auto" scales those to whatever width the aspect ratio produces,
+     which can overflow the button and visually shove neighboring buttons
+     (including the pay/submit button) out of position. This box guarantees
+     any uploaded image shrinks to fit inside it, preserving its aspect
+     ratio, and never overflows regardless of the source image's dimensions.
+  */
+  .pm-logo-box {
+    height: 20px;
+    max-width: 100%;
+    width: auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #fff;
+    border-radius: 3px;
+    padding: 2px 5px;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+  .pm-logo-box img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    display: block;
   }
   .pm-badge {
     display: inline-flex;
@@ -7844,8 +7881,12 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       const slot = document.querySelector(`.pm-icon-slot[data-method="${method}"]`);
       if (!slot) return;
       const details = merchant[method] || {};
+      // .pm-logo-box gives an uploaded logo a fixed, contained box (any
+      // shape/resolution scales down to fit) instead of the unconstrained
+      // sizing that let oversized logos overflow their button. See the
+      // .pm-logo-box CSS comment for the full explanation.
       slot.innerHTML = details.logoImage
-        ? `<span class="pm-icon-row"><img class="pm-logo" src="${details.logoImage}" alt="${merchantLabel(method)}"></span>`
+        ? `<span class="pm-logo-box"><img src="${details.logoImage}" alt="${merchantLabel(method)}"></span>`
         : PM_DEFAULT_BADGE_HTML[method];
     });
     updatePaymentMethodChooserVisibility();
