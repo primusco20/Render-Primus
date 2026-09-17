@@ -15,3 +15,11 @@ services:
       # - ANTHROPIC_API_KEY
       # - OPENAI_API_KEY
       # - GEMINI_API_KEY
+      # - RESEND_API_KEY        from resend.com/api-keys — sends receipt/card emails
+      # - FROM_EMAIL            e.g. "Primus Barbershop <membership@yourdomain.com>"
+      #                         must be on a domain verified in Resend (SPF+DKIM) —
+      #                         see docs/EMAIL_SETUP.md
+      # - TURNSTILE_SECRET_KEY  from the Cloudflare Turnstile dashboard — blocks
+      #                         scripted/bot submissions to the payment forms
+      # - ALLOWED_ORIGIN        e.g. https://primus-barbershop.onrender.com —
+      #                         rejects payment POSTs from other origins

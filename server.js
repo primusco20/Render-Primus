@@ -9,10 +9,19 @@
  *   POST /api/state                       admin-only: save full state
  *   GET  /api/admin/state                 admin-only: full state (incl. password)
  *   POST /api/payments/paymongo/checkout  start a live PayMongo checkout
+ *   POST /api/payments/xendit/checkout    start a live Xendit checkout (PayMongo alternative)
  *   POST /api/payments/manual             submit a manual-transfer membership
- *   GET  /api/payments/paymongo/status    poll a checkout session's status
+ *   GET  /api/payments/paymongo/status    poll a PayMongo checkout session's status
+ *   GET  /api/payments/xendit/status      poll a Xendit invoice's status
  *   POST /api/payments/paymongo/webhook   PayMongo calls this on payment (reliable confirmation)
+ *   POST /api/payments/xendit/webhook     Xendit calls this on payment (reliable confirmation)
  *   POST /api/ai-chat                     advanced AI chat (optional)
+ *
+ * Only one live gateway (PayMongo or Xendit) is ever active for customers at
+ * a time — see merchant.paymongoEnabled / merchant.xenditEnabled in state and
+ * the "Payment Mode" switch in Admin > Payment Merchant (index.html). Both
+ * can be configured on the server at once; whichever one is switched on in
+ * Admin decides which one customers actually see.
  *
  * STORAGE
  * -------
@@ -30,12 +39,20 @@
  * ------------------------------------------------------------------
  *   PORT                  set automatically by Render
  *   STATE_FILE             optional, defaults to ./data/state.json
- *   PAYMONGO_SECRET_KEY    optional — enables live card/GCash/Maya checkout
+ *   PAYMONGO_SECRET_KEY    optional — enables live card/GCash/Maya checkout via PayMongo
  *   PAYMONGO_WEBHOOK_SECRET optional — verifies PayMongo webhook calls; get
  *                          this from the Dashboard when you add the webhook
  *                          endpoint (Developers > Webhooks). Without it, the
  *                          app still works via /status polling alone — this
  *                          just makes payment confirmation more reliable.
+ *   XENDIT_SECRET_KEY      optional — enables live card/GCash/Maya checkout via
+ *                          Xendit (xendit.co), a PayMongo alternative. Get it
+ *                          from Xendit Dashboard > Settings > API Keys.
+ *   XENDIT_WEBHOOK_TOKEN   optional — verifies Xendit webhook ("callback")
+ *                          calls; this is the plain "Verification Token"
+ *                          shown in Xendit Dashboard > Settings > Webhooks —
+ *                          not a secret you generate yourself. Without it,
+ *                          the app still works via /status polling alone.
  *   ANTHROPIC_API_KEY      optional — enables Claude for the AI chat widget
  *   OPENAI_API_KEY         optional — enables GPT for the AI chat widget
  *   GEMINI_API_KEY         optional — enables Gemini for the AI chat widget
@@ -47,6 +64,7 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const mailer = require('./mailer'); // Resend-backed transactional email (see mailer.js)
 
 const app = express();
 app.set('trust proxy', true); // Render sits behind a proxy; needed for correct req.protocol
@@ -67,9 +85,21 @@ const PAYMONGO_SECRET_KEY = process.env.PAYMONGO_SECRET_KEY || '';
 // only used to verify that incoming webhook POSTs genuinely came from
 // PayMongo, never sent to PayMongo's API.
 const PAYMONGO_WEBHOOK_SECRET = process.env.PAYMONGO_WEBHOOK_SECRET || '';
+// Xendit (xendit.co) — the alternative live gateway to PayMongo. Same idea:
+// a secret key to create/check checkouts, and a separate webhook token to
+// verify that incoming "callback" POSTs genuinely came from Xendit.
+const XENDIT_SECRET_KEY = process.env.XENDIT_SECRET_KEY || '';
+const XENDIT_WEBHOOK_TOKEN = process.env.XENDIT_WEBHOOK_TOKEN || '';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+// Cloudflare Turnstile secret key (see docs/EMAIL_SETUP.md) — verifies that
+// signup/payment submissions come from a real browser, not a script.
+const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || '';
+// Exact origin this site is served from, e.g. https://primusbarbershop.onrender.com
+// or your custom domain. Used to reject cross-site POSTs to the payment
+// endpoints. Leave unset during local development.
+const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
 
 const DEFAULT_ADMIN_PASSWORD = 'primusadmin2026'; // matches index.html's client-side default
 
@@ -90,7 +120,7 @@ function readState() {
       adminPassword: DEFAULT_ADMIN_PASSWORD,
       members: {},
       bookings: [],
-      merchant: { paymongoEnabled: false },
+      merchant: { paymongoEnabled: false, xenditEnabled: false },
       _payments: {}, // internal: paymongo ref -> { status, membershipNumber, checkoutSessionId, name, email, phone }
     };
   }
@@ -119,6 +149,76 @@ function baseUrl(req) {
   if (process.env.PUBLIC_BASE_URL) return process.env.PUBLIC_BASE_URL.replace(/\/$/, '');
   return `${req.protocol}://${req.get('host')}`;
 }
+
+// ---------------------------------------------------------------------------
+// Bot / abuse defenses — Cloudflare Turnstile + a lightweight rate limiter.
+// No new services: Turnstile is a single server-side verify call, and the
+// rate limiter is in-memory (fine for Render's free single-instance plan).
+// ---------------------------------------------------------------------------
+
+// Verifies a Turnstile token with Cloudflare. Returns true if TURNSTILE_SECRET_KEY
+// isn't set yet, so the site keeps working while you're setting things up —
+// once you set the env var, unverified/missing tokens start failing closed.
+async function verifyTurnstile(token, remoteip) {
+  if (!TURNSTILE_SECRET_KEY) return true;
+  if (!token) return false;
+  try {
+    const resp = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ secret: TURNSTILE_SECRET_KEY, response: token, remoteip: remoteip || '' }),
+    });
+    const json = await resp.json();
+    return !!json.success;
+  } catch (err) {
+    console.error('[turnstile] verification request failed:', err.message);
+    return false; // fail closed on network errors
+  }
+}
+
+// Rejects state-mutating requests whose Origin/Referer doesn't match this
+// site, once ALLOWED_ORIGIN is set. Browsers always send Origin on
+// cross-site POSTs, so this blocks a script on another domain from calling
+// these routes directly. It does nothing against curl/Postman — that's what
+// Turnstile + rate limiting are for.
+function checkOrigin(req, res, next) {
+  if (!ALLOWED_ORIGIN) return next();
+  const origin = req.get('origin') || req.get('referer') || '';
+  if (origin.startsWith(ALLOWED_ORIGIN)) return next();
+  console.warn('[origin-check] blocked request from origin:', origin || '(none)');
+  return res.status(403).json({ error: 'Request origin not allowed.' });
+}
+
+// Minimal fixed-window in-memory rate limiter — zero dependencies. If you
+// ever move this service to multiple Render instances, swap the Map for a
+// shared store (e.g. Upstash Redis) since each instance would otherwise
+// count separately.
+function rateLimit({ windowMs, max }) {
+  const hits = new Map(); // ip -> array of request timestamps
+  setInterval(() => {
+    const cutoff = Date.now() - windowMs;
+    for (const [ip, arr] of hits) {
+      const kept = arr.filter((t) => t > cutoff);
+      if (kept.length) hits.set(ip, kept); else hits.delete(ip);
+    }
+  }, windowMs).unref();
+
+  return (req, res, next) => {
+    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const now = Date.now();
+    const arr = (hits.get(ip) || []).filter((t) => now - t < windowMs);
+    if (arr.length >= max) {
+      return res.status(429).json({ error: 'Too many requests — please wait a moment and try again.' });
+    }
+    arr.push(now);
+    hits.set(ip, arr);
+    next();
+  };
+}
+
+// 8 attempts per 15 minutes per IP — generous for a real customer retrying a
+// typo, tight enough to blunt a scripted flood of fake submissions.
+const paymentLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 8 });
 
 function generateMembershipNumber(members) {
   let memNum;
@@ -151,15 +251,38 @@ function markPaymentPaid(state, ref) {
   if (!state.members) state.members = {};
   const existing = findMemberByContact(state.members, record.email, record.phone);
   const memNum = existing || generateMembershipNumber(state.members);
+  const paidDate = new Date().toISOString().slice(0, 10);
   state.members[memNum] = {
     name: record.name, email: record.email, phone: record.phone,
-    method: 'paymongo',
-    paidDate: new Date().toISOString().slice(0, 10),
+    // record.gateway is set when the checkout is created (see the
+    // paymongo/checkout and xendit/checkout routes below). Old payment
+    // records from before this field existed default to 'paymongo'.
+    method: record.gateway || 'paymongo',
+    paidDate,
     active: true,
     pendingVerification: false,
+    // Marked true right away since the welcome emails are fired below —
+    // this stops the /api/state handler from re-sending them later if an
+    // admin edit round-trips this same member through the dashboard.
+    emailSent: true,
   };
   record.status = 'paid';
   record.membershipNumber = memNum;
+
+  // Fire the receipt + membership card emails in the background. Never
+  // block payment confirmation on email delivery, and a failed send never
+  // affects the membership itself — mailer.js logs failures on its own.
+  mailer.sendMembershipWelcomeEmails(state.businessName || 'Your Barbershop', {
+    name: record.name,
+    email: record.email,
+    membershipNumber: memNum,
+    amount: state.subscriptionAmount,
+    currency: 'PHP',
+    method: record.gateway,
+    paidDate,
+    discountRate: state.discountRate,
+  }).catch((err) => console.error('[mailer] welcome emails failed for', memNum, err));
+
   return record;
 }
 
@@ -167,6 +290,14 @@ function findRefByCheckoutSessionId(state, checkoutSessionId) {
   if (!state._payments) return null;
   for (const [ref, record] of Object.entries(state._payments)) {
     if (record.checkoutSessionId === checkoutSessionId) return ref;
+  }
+  return null;
+}
+
+function findRefByXenditInvoiceId(state, invoiceId) {
+  if (!state._payments) return null;
+  for (const [ref, record] of Object.entries(state._payments)) {
+    if (record.xenditInvoiceId === invoiceId) return ref;
   }
   return null;
 }
@@ -213,6 +344,7 @@ app.get('/api/state', (req, res) => {
   delete publicState.adminPassword;
   delete publicState._payments;
   publicState.paymongoAvailable = !!PAYMONGO_SECRET_KEY;
+  publicState.xenditAvailable = !!XENDIT_SECRET_KEY;
   publicState.aiChatAvailable = !!(ANTHROPIC_API_KEY || OPENAI_API_KEY || GEMINI_API_KEY);
   res.json(publicState);
 });
@@ -223,6 +355,34 @@ app.post('/api/state', (req, res) => {
   const incoming = req.body || {};
   // Preserve internal bookkeeping that the client doesn't know about.
   const merged = { ...state, ...incoming, _payments: state._payments || {} };
+
+  // A manual-transfer membership starts as { active:false, pendingVerification:true }
+  // (see /api/payments/manual below) and staff approves it from the Admin
+  // dashboard's members list, which round-trips the whole state through
+  // this route. Catch that transition here and send the same receipt +
+  // card emails a live-checkout payment gets — guarded by emailSent so
+  // re-saving the dashboard (which POSTs full state on every edit) never
+  // re-sends them.
+  if (merged.members) {
+    for (const [memNum, member] of Object.entries(merged.members)) {
+      const before = state.members && state.members[memNum];
+      const justApproved = member.active && !member.emailSent && (!before || !before.active);
+      if (justApproved && member.email) {
+        member.emailSent = true;
+        mailer.sendMembershipWelcomeEmails(merged.businessName || 'Your Barbershop', {
+          name: member.name,
+          email: member.email,
+          membershipNumber: memNum,
+          amount: merged.subscriptionAmount,
+          currency: 'PHP',
+          method: member.method,
+          paidDate: member.paidDate,
+          discountRate: merged.discountRate,
+        }).catch((err) => console.error('[mailer] welcome emails failed for', memNum, err));
+      }
+    }
+  }
+
   writeState(merged);
   res.json({ ok: true });
 });
@@ -239,11 +399,16 @@ app.get('/api/admin/state', (req, res) => {
 // Payments — manual (bank/GCash transfer verified by staff later)
 // ---------------------------------------------------------------------------
 
-app.post('/api/payments/manual', (req, res) => {
-  const { method, name, email, phone, referenceNumber } = req.body || {};
+app.post('/api/payments/manual', checkOrigin, paymentLimiter, async (req, res) => {
+  const { method, name, email, phone, referenceNumber, turnstileToken } = req.body || {};
   if (!name || !email || !phone || !referenceNumber) {
     return res.status(400).json({ error: 'name, email, phone, and referenceNumber are required.' });
   }
+  const human = await verifyTurnstile(turnstileToken, req.ip);
+  if (!human) {
+    return res.status(403).json({ error: 'Verification failed. Please refresh the page and try again.' });
+  }
+
   const state = readState();
   if (!state.members) state.members = {};
 
@@ -256,9 +421,42 @@ app.post('/api/payments/manual', (req, res) => {
     paidDate: new Date().toISOString().slice(0, 10),
     active: false,
     pendingVerification: true,
+    emailSent: false, // set true by /api/state once staff approves this membership
   };
   writeState(state);
   res.json({ membershipNumber: memNum });
+});
+
+// ---------------------------------------------------------------------------
+// Membership — resend the digital card email (customer lost the original)
+// ---------------------------------------------------------------------------
+
+app.post('/api/members/resend-card', checkOrigin, paymentLimiter, async (req, res) => {
+  const { email, phone, turnstileToken } = req.body || {};
+  if (!email && !phone) {
+    return res.status(400).json({ error: 'email or phone is required.' });
+  }
+  const human = await verifyTurnstile(turnstileToken, req.ip);
+  if (!human) {
+    return res.status(403).json({ error: 'Verification failed. Please refresh the page and try again.' });
+  }
+
+  const state = readState();
+  const memNum = findMemberByContact(state.members || {}, email, phone);
+
+  // Respond identically whether or not a match was found, so this endpoint
+  // can't be used to check which emails/phones belong to real members.
+  if (memNum && state.members[memNum].active) {
+    const member = state.members[memNum];
+    mailer.sendMembershipCardEmail({
+      businessName: state.businessName || 'Your Barbershop',
+      name: member.name,
+      email: member.email,
+      membershipNumber: memNum,
+      discountRate: state.discountRate,
+    }).catch((err) => console.error('[mailer] resend-card failed for', memNum, err));
+  }
+  res.json({ ok: true, message: 'If that matches an active membership on file, the card has been resent.' });
 });
 
 // ---------------------------------------------------------------------------
@@ -267,17 +465,21 @@ app.post('/api/payments/manual', (req, res) => {
 
 const PAYMONGO_METHOD_MAP = { card: 'card', gcash: 'gcash', maya: 'paymaya' };
 
-app.post('/api/payments/paymongo/checkout', async (req, res) => {
+app.post('/api/payments/paymongo/checkout', checkOrigin, paymentLimiter, async (req, res) => {
   if (!PAYMONGO_SECRET_KEY) {
     return res.status(503).json({ error: 'Live payments are not configured on this server yet.' });
   }
-  const { method, name, email, phone } = req.body || {};
+  const { method, name, email, phone, turnstileToken } = req.body || {};
   const pmMethod = PAYMONGO_METHOD_MAP[method];
   if (!pmMethod) {
     return res.status(400).json({ error: 'Unsupported payment method for live checkout.' });
   }
   if (!name || !email || !phone) {
     return res.status(400).json({ error: 'name, email, and phone are required.' });
+  }
+  const human = await verifyTurnstile(turnstileToken, req.ip);
+  if (!human) {
+    return res.status(403).json({ error: 'Verification failed. Please refresh the page and try again.' });
   }
 
   const state = readState();
@@ -321,6 +523,7 @@ app.post('/api/payments/paymongo/checkout', async (req, res) => {
     if (!state._payments) state._payments = {};
     state._payments[ref] = {
       status: 'pending',
+      gateway: 'paymongo',
       checkoutSessionId: json.data.id,
       name, email, phone,
     };
@@ -423,6 +626,166 @@ app.post('/api/payments/paymongo/webhook', (req, res) => {
     console.error('[paymongo/webhook] error handling event:', err);
     // Still 200 — the signature was valid, this was our bug, and we don't
     // want PayMongo hammering retries for something a retry can't fix.
+    res.status(200).json({ received: true, error: 'internal error while processing' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Payments — live Xendit checkout (card / gcash / maya) — an alternative to
+// PayMongo above. Same shape (checkout → redirect → poll/webhook confirm),
+// different provider. Xendit is the most commonly recommended PayMongo
+// alternative for Philippine businesses: a similarly REST/webhook-based API
+// with broad local coverage (cards, GCash, Maya, GrabPay, over-the-counter).
+// Docs: https://developers.xendit.co/api-reference/#create-invoice
+//
+// Two things genuinely differ from PayMongo's integration, worth double
+// checking against Xendit's current docs before going live:
+//   1. Amount is in the currency's normal unit (e.g. 500 = ₱500), NOT
+//      centavos — unlike PayMongo, which wants amount * 100.
+//   2. Webhook auth is a plain shared token (x-callback-token, compared
+//      directly to XENDIT_WEBHOOK_TOKEN), not an HMAC signature.
+// ---------------------------------------------------------------------------
+
+const XENDIT_METHOD_MAP = { card: 'CREDIT_CARD', gcash: 'GCASH', maya: 'PAYMAYA' };
+
+app.post('/api/payments/xendit/checkout', checkOrigin, paymentLimiter, async (req, res) => {
+  if (!XENDIT_SECRET_KEY) {
+    return res.status(503).json({ error: 'Live payments are not configured on this server yet.' });
+  }
+  const { method, name, email, phone, turnstileToken } = req.body || {};
+  const xenditMethod = XENDIT_METHOD_MAP[method];
+  if (!xenditMethod) {
+    return res.status(400).json({ error: 'Unsupported payment method for live checkout.' });
+  }
+  if (!name || !email || !phone) {
+    return res.status(400).json({ error: 'name, email, and phone are required.' });
+  }
+  const human = await verifyTurnstile(turnstileToken, req.ip);
+  if (!human) {
+    return res.status(403).json({ error: 'Verification failed. Please refresh the page and try again.' });
+  }
+
+  const state = readState();
+  const amount = state.subscriptionAmount || 500; // pesos, not centavos — see note above
+  const ref = crypto.randomUUID();
+
+  try {
+    const resp = await fetch('https://api.xendit.co/v2/invoices', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Basic ' + Buffer.from(`${XENDIT_SECRET_KEY}:`).toString('base64'),
+      },
+      body: JSON.stringify({
+        external_id: ref,
+        amount,
+        currency: 'PHP',
+        payer_email: email,
+        description: `${state.businessName || 'Barbershop'} Membership`,
+        payment_methods: [xenditMethod],
+        customer: { given_names: name, email, mobile_number: phone },
+        success_redirect_url: `${baseUrl(req)}/?xendit=success&ref=${ref}`,
+        failure_redirect_url: `${baseUrl(req)}/?xendit=cancelled`,
+      }),
+    });
+    const json = await resp.json();
+    if (!resp.ok) {
+      const msg = json?.message || json?.errors?.[0]?.message || 'Xendit rejected the checkout request.';
+      return res.status(502).json({ error: msg });
+    }
+
+    if (!state._payments) state._payments = {};
+    state._payments[ref] = {
+      status: 'pending',
+      gateway: 'xendit',
+      xenditInvoiceId: json.id,
+      name, email, phone,
+    };
+    writeState(state);
+
+    res.json({ checkoutUrl: json.invoice_url });
+  } catch (err) {
+    console.error('[xendit/checkout] error:', err);
+    res.status(502).json({ error: 'Could not reach Xendit. Please try again.' });
+  }
+});
+
+app.get('/api/payments/xendit/status', async (req, res) => {
+  const ref = req.query.ref;
+  if (!ref) return res.status(400).json({ error: 'ref is required.' });
+
+  const state = readState();
+  const record = state._payments && state._payments[ref];
+  if (!record) return res.status(404).json({ error: 'Unknown reference.' });
+
+  if (record.status === 'paid') {
+    return res.json({ status: 'paid', membershipNumber: record.membershipNumber });
+  }
+  if (!XENDIT_SECRET_KEY) {
+    return res.json({ status: record.status });
+  }
+
+  try {
+    const resp = await fetch(`https://api.xendit.co/v2/invoices/${record.xenditInvoiceId}`, {
+      headers: { 'Authorization': 'Basic ' + Buffer.from(`${XENDIT_SECRET_KEY}:`).toString('base64') },
+    });
+    const json = await resp.json();
+    const paid = json?.status === 'PAID' || json?.status === 'SETTLED';
+
+    if (paid) {
+      const updated = markPaymentPaid(state, ref);
+      writeState(state);
+      return res.json({ status: 'paid', membershipNumber: updated.membershipNumber });
+    }
+
+    res.json({ status: 'pending' });
+  } catch (err) {
+    console.error('[xendit/status] error:', err);
+    res.json({ status: record.status || 'pending' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Payments — Xendit webhook ("callback" in Xendit's terminology)
+// ---------------------------------------------------------------------------
+//
+// Set this up once in the Xendit Dashboard: Settings > Webhooks > Invoices
+// callback URL = https://<your-render-url>/api/payments/xendit/webhook.
+// The same page shows a "Verification Token" — put that in the
+// XENDIT_WEBHOOK_TOKEN environment variable on Render. Unlike PayMongo,
+// this token is compared directly (no HMAC signing).
+app.post('/api/payments/xendit/webhook', (req, res) => {
+  if (!XENDIT_WEBHOOK_TOKEN) {
+    console.warn('[xendit/webhook] received an event but XENDIT_WEBHOOK_TOKEN is not set — ignoring.');
+    return res.status(200).json({ received: true, note: 'webhook token not configured' });
+  }
+
+  const provided = req.get('x-callback-token') || '';
+  const expectedBuf = Buffer.from(XENDIT_WEBHOOK_TOKEN, 'utf8');
+  const providedBuf = Buffer.from(provided, 'utf8');
+  const valid = expectedBuf.length === providedBuf.length && crypto.timingSafeEqual(expectedBuf, providedBuf);
+
+  if (!valid) {
+    console.warn('[xendit/webhook] token verification failed — discarding.');
+    return res.status(401).json({ error: 'Invalid token.' });
+  }
+
+  try {
+    const event = req.body || {};
+    if (event.status === 'PAID' || event.status === 'SETTLED') {
+      const state = readState();
+      const ref = event.external_id || findRefByXenditInvoiceId(state, event.id);
+      if (ref && state._payments && state._payments[ref]) {
+        markPaymentPaid(state, ref);
+        writeState(state);
+      } else {
+        console.warn('[xendit/webhook] paid event for unknown external_id:', ref);
+      }
+    }
+    res.status(200).json({ received: true });
+  } catch (err) {
+    console.error('[xendit/webhook] error handling event:', err);
+    // Still 200, same reasoning as the PayMongo webhook above.
     res.status(200).json({ received: true, error: 'internal error while processing' });
   }
 });
@@ -583,5 +946,10 @@ app.listen(PORT, () => {
   console.log(`Primus Barbershop server listening on port ${PORT}`);
   console.log(`  PayMongo:  ${PAYMONGO_SECRET_KEY ? 'configured' : 'not configured'}`);
   console.log(`  PayMongo webhook secret: ${PAYMONGO_WEBHOOK_SECRET ? 'configured' : 'not configured (payments still work via /status polling)'}`);
+  console.log(`  Xendit:    ${XENDIT_SECRET_KEY ? 'configured' : 'not configured'}`);
+  console.log(`  Xendit webhook token: ${XENDIT_WEBHOOK_TOKEN ? 'configured' : 'not configured (payments still work via /status polling)'}`);
   console.log(`  AI chat:   ${(ANTHROPIC_API_KEY || OPENAI_API_KEY || GEMINI_API_KEY) ? 'configured' : 'not configured'}`);
+  console.log(`  Resend email: ${(process.env.RESEND_API_KEY && process.env.FROM_EMAIL) ? 'configured' : 'not configured — receipts/cards will be skipped and logged'}`);
+  console.log(`  Turnstile: ${TURNSTILE_SECRET_KEY ? 'configured' : 'not configured — payment forms are unprotected against bots'}`);
+  console.log(`  Allowed origin: ${ALLOWED_ORIGIN || 'not set — cross-site POSTs are not blocked'}`);
 });

@@ -9,6 +9,13 @@
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@500;600;700;800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <!-- EmailJS SDK (initialized later, once Admin Settings are loaded, so the Public Key stays editable) -->
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
+<!-- Cloudflare Turnstile — proves the membership signup/payment forms are being
+     submitted by a real browser, not a script. Rendered invisibly (data-size
+     below) so customers never see a challenge unless Cloudflare decides one is
+     needed. Replace YOUR_TURNSTILE_SITE_KEY with the site key from the
+     Cloudflare Turnstile dashboard — this key is public by design, only the
+     secret key (server-side, in Render's env vars) needs to stay private. -->
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
 <!-- PeerJS: free browser-to-browser WebRTC signaling (used for the live "Call" button in the AI chat) -->
 <script type="text/javascript" src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <!-- face-api.js: real, client-side face detection + recognition (TensorFlow.js models), used for the barber login face scan -->
@@ -3848,9 +3855,15 @@
         </div>
       </div>
 
-      <!-- Live checkout path: Card / GCash / Maya via PayMongo -->
+      <!-- Invisible Turnstile challenge — see the script tag near the top of
+           <head> for setup notes. onTurnstileSuccess() stores the token that
+           processMembershipSignup() below sends with the payment/manual
+           request; the server verifies it before accepting either. -->
+      <div class="cf-turnstile" data-sitekey="YOUR_TURNSTILE_SITE_KEY" data-size="invisible" data-callback="onTurnstileSuccess"></div>
+
+      <!-- Live checkout path: Card / GCash / Maya via PayMongo or Xendit (whichever the admin has enabled) -->
       <div id="paymentLivePanel" style="display:none;">
-        <p style="font-size:0.78rem; color:var(--text-sub);">You'll be taken to a secure PayMongo checkout page to complete this payment. Your membership activates automatically the moment it's confirmed.</p>
+        <p style="font-size:0.78rem; color:var(--text-sub);">You'll be taken to a secure checkout page to complete this payment. Your membership activates automatically the moment it's confirmed.</p>
       </div>
 
       <!-- Manual transfer path: GCash/Maya (when live checkout is off), GoTyme, Mari Bank, QR -->
@@ -3893,7 +3906,7 @@
         <p style="font-size:0.75rem; color:var(--accent-light); margin:0;" id="membershipStatusMsg">Payment successful! Your membership number has been generated and activated.</p>
       </div>
 
-      <!-- Shown instead of membershipCardResult after a manual (non-PayMongo)
+      <!-- Shown instead of membershipCardResult after a manual (non-live)
            payment is submitted. The membership number itself stays hidden
            until an admin approves the transfer — see showPendingMembershipResult /
            watchForMembershipApproval — at which point membershipApprovedPopupBackdrop
@@ -4438,13 +4451,15 @@
           <div style="padding:12px; border-radius:12px; background:var(--input-bg); border:1px solid var(--glass-border); margin-bottom:14px;">
             <div style="font-weight:700; font-size:0.9rem; margin-bottom:4px;">Payment Mode</div>
             <div style="font-size:0.75rem; color:var(--text-sub); margin-bottom:10px;" id="adminPaymongoStatusLabel">Choose how customers pay for membership.</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
               <button type="button" class="btn-unified" id="adminPayModeManualBtn" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.78rem; padding:10px; font-weight:700;" onclick="setAdminPaymentMode('manual')">Manual</button>
               <button type="button" class="btn-unified" id="adminPayModePaymongoBtn" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.78rem; padding:10px; font-weight:700;" onclick="setAdminPaymentMode('paymongo')">PayMongo Direct</button>
+              <button type="button" class="btn-unified" id="adminPayModeXenditBtn" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.78rem; padding:10px; font-weight:700;" onclick="setAdminPaymentMode('xendit')">Xendit Direct</button>
             </div>
-            <p style="font-size:0.68rem; color:var(--text-sub); margin:8px 0 0;"><strong>Manual</strong>: customers send payment themselves (GCash, Maya, GoTyme, Mari Bank, PayPal, or a QR you upload) and staff verifies it. <strong>PayMongo Direct</strong>: customers pay Card / GCash / Maya on a live PayMongo checkout page and membership activates automatically — every manual method is hidden from customers in this mode.</p>
-            <!-- Actual saved value — kept as a hidden checkbox so the rest of the save/load pipeline (saveAdminSettings, requireAdmin state merge, etc.) needs no changes. Driven entirely by setAdminPaymentMode()/renderAdminPaymentModeButtons() above. -->
+            <p style="font-size:0.68rem; color:var(--text-sub); margin:8px 0 0;"><strong>Manual</strong>: customers send payment themselves (GCash, Maya, GoTyme, Mari Bank, PayPal, or a QR you upload) and staff verifies it. <strong>PayMongo Direct</strong> / <strong>Xendit Direct</strong>: customers pay Card / GCash / Maya on a live checkout page for that gateway and membership activates automatically — every manual method is hidden from customers in either live mode. Xendit is offered as an alternative to PayMongo — same idea, different provider and fees — so you can compare and pick whichever works better for you; only one live gateway is ever active for customers at a time.</p>
+            <!-- Actual saved values — kept as hidden checkboxes so the rest of the save/load pipeline (saveAdminSettings, requireAdmin state merge, etc.) needs no changes. Driven entirely by setAdminPaymentMode()/renderAdminPaymentModeButtons() above. -->
             <input type="checkbox" id="adminPaymongoEnabled" style="display:none;">
+            <input type="checkbox" id="adminXenditEnabled" style="display:none;">
           </div>
 
 
@@ -5298,11 +5313,13 @@
     ],
     bookings: [],
     // Where customer payments actually go. Filled in by Admin Panel >
-    // Payment Merchant. Card/GCash/Maya can additionally run through a
-    // live PayMongo Checkout Session (see server.js) once the server has a
-    // PAYMONGO_SECRET_KEY configured and this is turned on.
+    // Payment Merchant. Card/GCash/Maya can additionally run through a live
+    // checkout session (see server.js) via one of two gateways: PayMongo
+    // (PAYMONGO_SECRET_KEY) or Xendit (XENDIT_SECRET_KEY), the PayMongo
+    // alternative. Only one is ever turned on for customers at a time.
     merchant: {
       paymongoEnabled: false,
+      xenditEnabled: false,
       gcash: { name: '', number: '', qrImage: '', logoImage: '' },
       maya: { name: '', number: '', qrImage: '', logoImage: '' },
       gotyme: { name: '', number: '', qrImage: '', logoImage: '' },
@@ -5335,6 +5352,7 @@
   // running server.js) ----
   let serverBacked = false;
   let paymongoAvailable = false;
+  let xenditAvailable = false;
   let aiChatAvailable = false;
   let appSettings;
   try {
@@ -5345,6 +5363,8 @@
       const fetched = JSON.parse(xhr.responseText);
       paymongoAvailable = !!fetched.paymongoAvailable;
       delete fetched.paymongoAvailable;
+      xenditAvailable = !!fetched.xenditAvailable;
+      delete fetched.xenditAvailable;
       aiChatAvailable = !!fetched.aiChatAvailable;
       delete fetched.aiChatAvailable;
       // adminPassword is deliberately withheld by the server's public
@@ -6927,7 +6947,7 @@ let currentReviewBarber = '';
   // resolveMembershipRenewalReply / the "Renew membership" chat step):
   // opens the real membership modal, pre-fills it with what's already on
   // file for this member, and jumps straight to the payment step — same
-  // method picker, QR codes, and PayMongo checkout every sign-up uses —
+  // method picker, QR codes, and live checkout every sign-up uses —
   // instead of asking them to re-enter their name/email/phone. Flags
   // membershipRenewalTarget so processMembershipSignup() reuses this exact
   // membership number rather than minting a new one.
@@ -6960,15 +6980,27 @@ let currentReviewBarber = '';
     return { card: 'Card', gcash: 'GCash', maya: 'Maya', gotyme: 'GoTyme', maribank: 'Mari Bank', paypal: 'PayPal', qr: 'PH QR Code' }[method] || method;
   }
 
-  // Live PayMongo checkout is only offered for card/gcash/maya, and only if
-  // the admin has turned it on AND the server actually has a PayMongo key.
+  // Which live gateway (if any) is actually active right now: 'paymongo',
+  // 'xendit', or null (manual payment). Only one can be active at a time —
+  // set by the "Payment Mode" switch in Admin > Payment Merchant — and each
+  // one also needs its matching secret key configured on the server, or it
+  // doesn't count even if the admin toggle says otherwise.
+  function activeLiveGateway() {
+    if (!serverBacked || !appSettings.merchant) return null;
+    if (appSettings.merchant.paymongoEnabled && paymongoAvailable) return 'paymongo';
+    if (appSettings.merchant.xenditEnabled && xenditAvailable) return 'xendit';
+    return null;
+  }
+
+  // Live checkout (PayMongo or Xendit, whichever is active) is only offered
+  // for card/gcash/maya.
   function isLiveMethod(method) {
-    return ['card', 'gcash', 'maya'].includes(method) && serverBacked && paymongoAvailable && appSettings.merchant && appSettings.merchant.paymongoEnabled;
+    return ['card', 'gcash', 'maya'].includes(method) && !!activeLiveGateway();
   }
 
   // ---------- Customer "Link GCash Account" flow (membership manual payment) ----------
-  // Only shown for the manual (non-live) GCash path — when Live PayMongo
-  // Checkout is handling GCash, the customer never sees the manual panel at
+  // Only shown for the manual (non-live) GCash path — when a live checkout
+  // (PayMongo or Xendit) is handling GCash, the customer never sees the manual panel at
   // all, so there's nothing here to link. This doesn't charge the customer
   // by itself (there's no real GCash charge API available to a static site);
   // it records which account they're sending the transfer from, alongside
@@ -7075,7 +7107,14 @@ let currentReviewBarber = '';
     }
   }
 
-  // STEP B: routes to either a live PayMongo checkout redirect, or a manual
+  // Set by the invisible Turnstile widget's data-callback once Cloudflare
+  // confirms this is a real browser. Sent with the payment/manual requests
+  // below so the server can verify it too — see checkOrigin/verifyTurnstile
+  // in server.js. A fresh token is issued automatically after each use.
+  let turnstileToken = '';
+  function onTurnstileSuccess(token) { turnstileToken = token; }
+
+  // STEP B: routes to either a live checkout redirect (PayMongo or Xendit), or a manual
   // transfer submission — either way, a membership number cannot be
   // produced without successfully completing this step.
   async function processMembershipSignup() {
@@ -7109,14 +7148,15 @@ let currentReviewBarber = '';
     const payBtn = document.getElementById('payMembershipBtn');
 
     if (isLiveMethod(selectedPaymentMethod)) {
+      const gateway = activeLiveGateway(); // 'paymongo' or 'xendit'
       payBtn.disabled = true;
       payBtn.innerText = 'Redirecting to secure checkout…';
       try {
-        const resp = await fetch('/api/payments/paymongo/checkout', {
+        const resp = await fetch(`/api/payments/${gateway}/checkout`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            method: selectedPaymentMethod, name, email, phone,
+            method: selectedPaymentMethod, name, email, phone, turnstileToken,
             // Tells a server that supports renewals to reuse this exact
             // membership number instead of minting a new one. A server that
             // doesn't recognize this field just ignores it.
@@ -7125,8 +7165,8 @@ let currentReviewBarber = '';
         });
         const json = await resp.json();
         if (!resp.ok) throw new Error(json.error || 'Could not start checkout.');
-        // Remember who's paying so we can show the right thing when
-        // PayMongo redirects the customer back to this same page.
+        // Remember who's paying so we can show the right thing when the
+        // gateway redirects the customer back to this same page.
         sessionStorage.setItem('primus_pending_signup', JSON.stringify({ name, email, phone, method: selectedPaymentMethod, renewMembershipNumber: membershipRenewalTarget || null }));
         window.location.href = json.checkoutUrl;
       } catch (err) {
@@ -7171,7 +7211,7 @@ let currentReviewBarber = '';
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            method: selectedPaymentMethod, name, email, phone, referenceNumber: reference, ...senderAccount,
+            method: selectedPaymentMethod, name, email, phone, referenceNumber: reference, turnstileToken, ...senderAccount,
             ...(membershipRenewalTarget ? { renewMembershipNumber: membershipRenewalTarget } : {})
           })
         });
@@ -7278,8 +7318,9 @@ let currentReviewBarber = '';
     document.getElementById('membershipApprovedPopupBackdrop').classList.remove('open');
   }
 
-  // Shows a fully-active membership number right after a live PayMongo
-  // payment is confirmed (called from checkPaymongoReturn on page load).
+  // Shows a fully-active membership number right after a live payment
+  // (PayMongo or Xendit) is confirmed (called from checkPaymongoReturn on
+  // page load).
   function showActiveMembershipResult(memNum) {
     openMembershipModal();
     document.getElementById('membershipSignupStep').style.display = 'none';
@@ -7297,12 +7338,15 @@ let currentReviewBarber = '';
     }).catch(() => handleMembershipInput());
   }
 
-  // Called once on page load. If PayMongo just redirected the customer back
-  // here (?paymongo=success&ref=...), poll our server for confirmation and
-  // reveal the finished membership number.
+  // Called once on page load. If a live gateway just redirected the customer
+  // back here (?paymongo=success&ref=... or ?xendit=success&ref=...), poll
+  // that same gateway's /status endpoint for confirmation and reveal the
+  // finished membership number.
   async function checkPaymongoReturn() {
     const params = new URLSearchParams(window.location.search);
-    const status = params.get('paymongo');
+    const gateway = params.has('paymongo') ? 'paymongo' : params.has('xendit') ? 'xendit' : null;
+    if (!gateway) return;
+    const status = params.get(gateway);
     const ref = params.get('ref');
     if (!status || !ref) return;
 
@@ -7310,13 +7354,13 @@ let currentReviewBarber = '';
     window.history.replaceState({}, document.title, window.location.pathname);
 
     if (status === 'cancelled') {
-      return; // customer backed out of PayMongo checkout — nothing to show
+      return; // customer backed out of the live checkout — nothing to show
     }
 
     if (status === 'success' && serverBacked) {
       for (let attempt = 0; attempt < 10; attempt++) {
         try {
-          const resp = await fetch(`/api/payments/paymongo/status?ref=${encodeURIComponent(ref)}`);
+          const resp = await fetch(`/api/payments/${gateway}/status?ref=${encodeURIComponent(ref)}`);
           const json = await resp.json();
           if (json.status === 'paid' && json.membershipNumber) {
             showActiveMembershipResult(json.membershipNumber);
@@ -7893,26 +7937,26 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
   }
 
   // The shop is in exactly one payment mode at a time, set by the "Payment
-  // Mode" switch in Admin > Payment Merchant. In PayMongo mode, customers
-  // only ever see Card / GCash / Maya, all routed through live PayMongo
-  // checkout — every manual method (GoTyme, Mari Bank, PayPal, generic QR)
-  // is hidden. In Manual mode, Card disappears (there's no manual
-  // equivalent for it) and every manual-transfer method is offered
-  // instead, with GCash/Maya falling back to their manual (staff-verified)
-  // path. Called any time the chooser is (re)rendered — see
-  // applyMerchantLogosToChooser's call sites.
+  // Mode" switch in Admin > Payment Merchant. In live mode (PayMongo or
+  // Xendit direct), customers only ever see Card / GCash / Maya, all routed
+  // through that gateway's live checkout — every manual method (GoTyme,
+  // Mari Bank, PayPal, generic QR) is hidden. In Manual mode, Card
+  // disappears (there's no manual equivalent for it) and every
+  // manual-transfer method is offered instead, with GCash/Maya falling back
+  // to their manual (staff-verified) path. Called any time the chooser is
+  // (re)rendered — see applyMerchantLogosToChooser's call sites.
   function updatePaymentMethodChooserVisibility() {
     const chooser = document.getElementById('paymentMethodChooser');
     if (!chooser) return;
-    const payMongoMode = isLiveMethod('card'); // true only when PayMongo is fully enabled + configured
+    const liveGatewayMode = isLiveMethod('card'); // true only when a live gateway is fully enabled + configured
     const manualOnlyMethods = ['gotyme', 'maribank', 'paypal', 'qr'];
     chooser.querySelectorAll('.pm-choice-btn').forEach(btn => {
       const method = btn.getAttribute('data-method');
       let visible;
       if (method === 'card') {
-        visible = payMongoMode;
+        visible = liveGatewayMode;
       } else if (manualOnlyMethods.includes(method)) {
-        visible = !payMongoMode;
+        visible = !liveGatewayMode;
       } else {
         visible = true; // gcash / maya are always offered, live or manual
       }
@@ -7932,37 +7976,54 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     }
   }
 
-  // ---- Admin: Payment Mode switch (Manual vs PayMongo Direct) ----
-  // Drives the hidden #adminPaymongoEnabled checkbox that saveAdminSettings
-  // already reads, so nothing about the save pipeline needs to change.
+  // ---- Admin: Payment Mode switch (Manual vs PayMongo Direct vs Xendit Direct) ----
+  // Drives the hidden #adminPaymongoEnabled / #adminXenditEnabled checkboxes
+  // that saveAdminSettings already reads, so nothing about the save pipeline
+  // needs to change. The two live checkboxes are always kept mutually
+  // exclusive here — only one live gateway is ever active for customers.
   function setAdminPaymentMode(mode) {
-    if (mode === 'paymongo' && !paymongoAvailable) return; // can't switch until server has a key
+    if (mode === 'paymongo' && !paymongoAvailable) return; // can't switch until server has a PayMongo key
+    if (mode === 'xendit' && !xenditAvailable) return; // can't switch until server has a Xendit key
     document.getElementById('adminPaymongoEnabled').checked = (mode === 'paymongo');
+    document.getElementById('adminXenditEnabled').checked = (mode === 'xendit');
     renderAdminPaymentModeButtons();
   }
 
   function renderAdminPaymentModeButtons() {
     const manualBtn = document.getElementById('adminPayModeManualBtn');
     const paymongoBtn = document.getElementById('adminPayModePaymongoBtn');
+    const xenditBtn = document.getElementById('adminPayModeXenditBtn');
     const statusLabel = document.getElementById('adminPaymongoStatusLabel');
-    if (!manualBtn || !paymongoBtn) return;
-    const enabled = document.getElementById('adminPaymongoEnabled').checked;
+    if (!manualBtn || !paymongoBtn || !xenditBtn) return;
+    const paymongoEnabled = document.getElementById('adminPaymongoEnabled').checked;
+    const xenditEnabled = document.getElementById('adminXenditEnabled').checked;
 
     const setActive = (btn, active) => {
       btn.style.background = active ? 'var(--accent)' : 'transparent';
       btn.style.color = active ? '#fff' : 'var(--text-main)';
       btn.style.borderColor = active ? 'var(--accent)' : '';
     };
-    setActive(manualBtn, !enabled);
-    setActive(paymongoBtn, enabled);
+    setActive(manualBtn, !paymongoEnabled && !xenditEnabled);
+    setActive(paymongoBtn, paymongoEnabled);
+    setActive(xenditBtn, xenditEnabled);
 
     paymongoBtn.disabled = !paymongoAvailable;
     paymongoBtn.style.opacity = paymongoAvailable ? '1' : '0.5';
     paymongoBtn.style.cursor = paymongoAvailable ? 'pointer' : 'not-allowed';
 
-    statusLabel.innerText = paymongoAvailable
-      ? 'Choose how customers pay for membership.'
-      : 'PayMongo Direct is unavailable until the server has a PayMongo secret key configured (see README) — customers will use Manual payment until then.';
+    xenditBtn.disabled = !xenditAvailable;
+    xenditBtn.style.opacity = xenditAvailable ? '1' : '0.5';
+    xenditBtn.style.cursor = xenditAvailable ? 'pointer' : 'not-allowed';
+
+    if (paymongoAvailable && xenditAvailable) {
+      statusLabel.innerText = 'Choose how customers pay for membership.';
+    } else if (!paymongoAvailable && !xenditAvailable) {
+      statusLabel.innerText = 'Live checkout is unavailable until the server has a PayMongo or Xendit secret key configured (see README) — customers will use Manual payment until then.';
+    } else if (!paymongoAvailable) {
+      statusLabel.innerText = 'PayMongo Direct is unavailable until the server has a PayMongo secret key configured (see README) — Xendit Direct or Manual still work.';
+    } else {
+      statusLabel.innerText = 'Xendit Direct is unavailable until the server has a Xendit secret key configured (see README) — PayMongo Direct or Manual still work.';
+    }
   }
 
   async function handleGalleryUpload(event) {
@@ -10544,6 +10605,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     const merchant = appSettings.merchant || {};
     document.getElementById('adminMerchantServerNotice').style.display = serverBacked ? 'none' : 'flex';
     document.getElementById('adminPaymongoEnabled').checked = !!merchant.paymongoEnabled && paymongoAvailable;
+    document.getElementById('adminXenditEnabled').checked = !!merchant.xenditEnabled && xenditAvailable;
     renderAdminPaymentModeButtons();
     document.getElementById('adminGcashName').value = (merchant.gcash && merchant.gcash.name) || '';
     document.getElementById('adminGcashNumber').value = (merchant.gcash && merchant.gcash.number) || '';
@@ -10742,6 +10804,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       const prevMerchant = appSettings.merchant || {};
       appSettings.merchant = {
         paymongoEnabled: document.getElementById('adminPaymongoEnabled').checked,
+        xenditEnabled: document.getElementById('adminXenditEnabled').checked,
         gcash: {
           name: document.getElementById('adminGcashName').value.trim(),
           number: document.getElementById('adminGcashNumber').value.trim(),
@@ -11139,7 +11202,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     // email it was signed up with) verified in sendChatMessage(), which then
     // opens the real membership modal straight at the payment step (see
     // startMembershipRenewalPayment) — same method picker, QR codes, and
-    // PayMongo checkout every new sign-up uses, just pre-filled and flagged
+    // live checkout every new sign-up uses, just pre-filled and flagged
     // to reuse this membership number instead of minting a new one.
     if (matchesAny(lower, [
       'renew my membership', 'renew membership', 'renew my subscription', 'membership renewal',
