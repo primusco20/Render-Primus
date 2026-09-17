@@ -11,6 +11,7 @@
  *   POST /api/payments/paymongo/checkout  start a live PayMongo checkout
  *   POST /api/payments/manual             submit a manual-transfer membership
  *   GET  /api/payments/paymongo/status    poll a checkout session's status
+ *   POST /api/payments/paymongo/webhook   PayMongo calls this on payment (reliable confirmation)
  *   POST /api/ai-chat                     advanced AI chat (optional)
  *
  * STORAGE
@@ -30,6 +31,11 @@
  *   PORT                  set automatically by Render
  *   STATE_FILE             optional, defaults to ./data/state.json
  *   PAYMONGO_SECRET_KEY    optional — enables live card/GCash/Maya checkout
+ *   PAYMONGO_WEBHOOK_SECRET optional — verifies PayMongo webhook calls; get
+ *                          this from the Dashboard when you add the webhook
+ *                          endpoint (Developers > Webhooks). Without it, the
+ *                          app still works via /status polling alone — this
+ *                          just makes payment confirmation more reliable.
  *   ANTHROPIC_API_KEY      optional — enables Claude for the AI chat widget
  *   OPENAI_API_KEY         optional — enables GPT for the AI chat widget
  *   GEMINI_API_KEY         optional — enables Gemini for the AI chat widget
@@ -44,11 +50,23 @@ const crypto = require('crypto');
 
 const app = express();
 app.set('trust proxy', true); // Render sits behind a proxy; needed for correct req.protocol
-app.use(express.json({ limit: '15mb' })); // generous limit: settings blob can include base64 images
+// The `verify` callback stashes the raw request body on req.rawBody as it's
+// parsed, without changing anything else about normal JSON parsing. This is
+// needed for the PayMongo webhook route, which must HMAC-sign the *raw*
+// bytes PayMongo sent, not a re-serialized version of the parsed JSON.
+app.use(express.json({
+  limit: '15mb', // generous limit: settings blob can include base64 images
+  verify: (req, res, buf) => { req.rawBody = buf; },
+}));
 
 const PORT = process.env.PORT || 3000;
 const STATE_FILE = process.env.STATE_FILE || path.join(__dirname, 'data', 'state.json');
 const PAYMONGO_SECRET_KEY = process.env.PAYMONGO_SECRET_KEY || '';
+// Set after creating the webhook in the PayMongo Dashboard (Developers >
+// Webhooks). This is a *different* secret from PAYMONGO_SECRET_KEY — it's
+// only used to verify that incoming webhook POSTs genuinely came from
+// PayMongo, never sent to PayMongo's API.
+const PAYMONGO_WEBHOOK_SECRET = process.env.PAYMONGO_WEBHOOK_SECRET || '';
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY || '';
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY || '';
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
@@ -117,6 +135,72 @@ function findMemberByContact(members, email, phone) {
     if (data.phone && normPhone && data.phone.replace(/\D/g, '').slice(-10) === normPhone) return memNum;
   }
   return null;
+}
+
+// Shared by both the /status polling endpoint and the PayMongo webhook so a
+// payment only ever gets marked paid and turned into a membership in one
+// place. Safe to call more than once for the same ref (e.g. the customer's
+// browser polls /status right as the webhook also arrives) — if it's
+// already paid, this is a no-op and just returns the existing membership.
+// Mutates `state` in place; caller is responsible for writeState(state).
+function markPaymentPaid(state, ref) {
+  const record = state._payments && state._payments[ref];
+  if (!record) return null;
+  if (record.status === 'paid') return record;
+
+  if (!state.members) state.members = {};
+  const existing = findMemberByContact(state.members, record.email, record.phone);
+  const memNum = existing || generateMembershipNumber(state.members);
+  state.members[memNum] = {
+    name: record.name, email: record.email, phone: record.phone,
+    method: 'paymongo',
+    paidDate: new Date().toISOString().slice(0, 10),
+    active: true,
+    pendingVerification: false,
+  };
+  record.status = 'paid';
+  record.membershipNumber = memNum;
+  return record;
+}
+
+function findRefByCheckoutSessionId(state, checkoutSessionId) {
+  if (!state._payments) return null;
+  for (const [ref, record] of Object.entries(state._payments)) {
+    if (record.checkoutSessionId === checkoutSessionId) return ref;
+  }
+  return null;
+}
+
+// Verifies a PayMongo webhook request per their documented scheme:
+// https://developers.paymongo.com/docs/securing-webhook
+//   Paymongo-Signature: t=<timestamp>,te=<test-mode-sig>,li=<live-mode-sig>
+//   signature = HMAC_SHA256(webhookSecret, `${timestamp}.${rawBody}`)
+// Compare against li if the event is live, te if it's a test event.
+function verifyPaymongoWebhookSignature(rawBody, signatureHeader, secret) {
+  if (!secret || !signatureHeader || !rawBody) return false;
+  const parts = {};
+  for (const kv of signatureHeader.split(',')) {
+    const [k, v] = kv.split('=');
+    if (k && v) parts[k.trim()] = v.trim();
+  }
+  const { t: timestamp, te: testSig, li: liveSig } = parts;
+  if (!timestamp || (!testSig && !liveSig)) return false;
+
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(`${timestamp}.${rawBody}`)
+    .digest('hex');
+
+  // Try live signature first (if present), then test — whichever this
+  // event actually carries. timingSafeEqual needs equal-length buffers, so
+  // guard the length check before comparing.
+  for (const candidate of [liveSig, testSig]) {
+    if (!candidate) continue;
+    const a = Buffer.from(expected, 'utf8');
+    const b = Buffer.from(candidate, 'utf8');
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) return true;
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -274,26 +358,72 @@ app.get('/api/payments/paymongo/status', async (req, res) => {
       (json?.data?.attributes?.payments || []).some(p => p.attributes?.status === 'paid');
 
     if (paid) {
-      if (!state.members) state.members = {};
-      const existing = findMemberByContact(state.members, record.email, record.phone);
-      const memNum = existing || generateMembershipNumber(state.members);
-      state.members[memNum] = {
-        name: record.name, email: record.email, phone: record.phone,
-        method: 'paymongo',
-        paidDate: new Date().toISOString().slice(0, 10),
-        active: true,
-        pendingVerification: false,
-      };
-      record.status = 'paid';
-      record.membershipNumber = memNum;
+      const updated = markPaymentPaid(state, ref);
       writeState(state);
-      return res.json({ status: 'paid', membershipNumber: memNum });
+      return res.json({ status: 'paid', membershipNumber: updated.membershipNumber });
     }
 
     res.json({ status: 'pending' });
   } catch (err) {
     console.error('[paymongo/status] error:', err);
     res.json({ status: record.status || 'pending' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Payments — PayMongo webhook (reliable confirmation even if the customer
+// closes the tab before being redirected back to success_url)
+// ---------------------------------------------------------------------------
+//
+// Set this up once in the PayMongo Dashboard: Developers > Webhooks > Add
+// Endpoint, URL = https://<your-render-url>/api/payments/paymongo/webhook,
+// event = checkout_session.payment.paid. PayMongo will show you a webhook
+// **signing secret** (starts with whsk_...) at that point — put that in the
+// PAYMONGO_WEBHOOK_SECRET environment variable on Render (this is separate
+// from PAYMONGO_SECRET_KEY).
+app.post('/api/payments/paymongo/webhook', (req, res) => {
+  // Always acknowledge quickly with 2xx once we've done our checks — per
+  // PayMongo's docs, failing to return 2xx triggers retries (up to 12) and
+  // can eventually get the webhook auto-disabled.
+  if (!PAYMONGO_WEBHOOK_SECRET) {
+    console.warn('[paymongo/webhook] received an event but PAYMONGO_WEBHOOK_SECRET is not set — ignoring.');
+    return res.status(200).json({ received: true, note: 'webhook secret not configured' });
+  }
+
+  const signatureHeader = req.get('Paymongo-Signature') || req.get('paymongo-signature');
+  const rawBody = req.rawBody ? req.rawBody.toString('utf8') : '';
+  const valid = verifyPaymongoWebhookSignature(rawBody, signatureHeader, PAYMONGO_WEBHOOK_SECRET);
+
+  if (!valid) {
+    console.warn('[paymongo/webhook] signature verification failed — discarding.');
+    return res.status(401).json({ error: 'Invalid signature.' });
+  }
+
+  try {
+    const event = req.body?.data?.attributes;
+    const eventType = event?.type;
+
+    if (eventType === 'checkout_session.payment.paid') {
+      const checkoutSessionId = event?.data?.id;
+      const state = readState();
+      const ref = checkoutSessionId ? findRefByCheckoutSessionId(state, checkoutSessionId) : null;
+
+      if (ref) {
+        markPaymentPaid(state, ref);
+        writeState(state);
+      } else {
+        console.warn('[paymongo/webhook] paid event for unknown checkout session:', checkoutSessionId);
+      }
+    }
+    // Other event types (payment.failed, etc.) are simply acknowledged and
+    // ignored for now — nothing in this app needs to react to them yet.
+
+    res.status(200).json({ received: true });
+  } catch (err) {
+    console.error('[paymongo/webhook] error handling event:', err);
+    // Still 200 — the signature was valid, this was our bug, and we don't
+    // want PayMongo hammering retries for something a retry can't fix.
+    res.status(200).json({ received: true, error: 'internal error while processing' });
   }
 });
 
@@ -452,5 +582,6 @@ app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 app.listen(PORT, () => {
   console.log(`Primus Barbershop server listening on port ${PORT}`);
   console.log(`  PayMongo:  ${PAYMONGO_SECRET_KEY ? 'configured' : 'not configured'}`);
+  console.log(`  PayMongo webhook secret: ${PAYMONGO_WEBHOOK_SECRET ? 'configured' : 'not configured (payments still work via /status polling)'}`);
   console.log(`  AI chat:   ${(ANTHROPIC_API_KEY || OPENAI_API_KEY || GEMINI_API_KEY) ? 'configured' : 'not configured'}`);
 });
