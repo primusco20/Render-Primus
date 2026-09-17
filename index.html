@@ -4398,16 +4398,18 @@
             ⚠️ This page isn't connected to the backend server right now, so these settings will only save to this browser. Run <code>server.js</code> (see the included README) so Payment Merchant settings — and membership numbers — are shared across every device.
           </div>
 
-          <div class="admin-toggle-row" style="padding:12px; border-radius:12px; background:var(--input-bg); border:1px solid var(--glass-border); margin-bottom:14px;">
-            <div class="admin-toggle-label">
-              <div style="font-weight:700; font-size:0.9rem;">Live Card / GCash / Maya Checkout (PayMongo)</div>
-              <div style="font-size:0.75rem; color:var(--text-sub);" id="adminPaymongoStatusLabel">Automatically charges customers through a real PayMongo checkout page. Requires a PayMongo secret key set on the server (never entered here).</div>
+          <div style="padding:12px; border-radius:12px; background:var(--input-bg); border:1px solid var(--glass-border); margin-bottom:14px;">
+            <div style="font-weight:700; font-size:0.9rem; margin-bottom:4px;">Payment Mode</div>
+            <div style="font-size:0.75rem; color:var(--text-sub); margin-bottom:10px;" id="adminPaymongoStatusLabel">Choose how customers pay for membership.</div>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+              <button type="button" class="btn-unified" id="adminPayModeManualBtn" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.78rem; padding:10px; font-weight:700;" onclick="setAdminPaymentMode('manual')">Manual</button>
+              <button type="button" class="btn-unified" id="adminPayModePaymongoBtn" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.78rem; padding:10px; font-weight:700;" onclick="setAdminPaymentMode('paymongo')">PayMongo Direct</button>
             </div>
-            <label class="admin-toggle">
-              <input type="checkbox" id="adminPaymongoEnabled" style="opacity: 0; width: 0; height: 0;">
-              <span></span>
-            </label>
+            <p style="font-size:0.68rem; color:var(--text-sub); margin:8px 0 0;"><strong>Manual</strong>: customers send payment themselves (GCash, Maya, GoTyme, Mari Bank, PayPal, or a QR you upload) and staff verifies it. <strong>PayMongo Direct</strong>: customers pay Card / GCash / Maya on a live PayMongo checkout page and membership activates automatically — every manual method is hidden from customers in this mode.</p>
+            <!-- Actual saved value — kept as a hidden checkbox so the rest of the save/load pipeline (saveAdminSettings, requireAdmin state merge, etc.) needs no changes. Driven entirely by setAdminPaymentMode()/renderAdminPaymentModeButtons() above. -->
+            <input type="checkbox" id="adminPaymongoEnabled" style="display:none;">
           </div>
+
 
           <div style="padding:12px; border-radius:12px; background:var(--input-bg); border:1px solid var(--glass-border); margin-bottom:12px;">
             <div class="admin-tab-panel-heading" style="font-size:0.85rem; margin-bottom:8px;">GCash</div>
@@ -7846,6 +7848,80 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
         ? `<span class="pm-icon-row"><img class="pm-logo" src="${details.logoImage}" alt="${merchantLabel(method)}"></span>`
         : PM_DEFAULT_BADGE_HTML[method];
     });
+    updatePaymentMethodChooserVisibility();
+  }
+
+  // The shop is in exactly one payment mode at a time, set by the "Payment
+  // Mode" switch in Admin > Payment Merchant. In PayMongo mode, customers
+  // only ever see Card / GCash / Maya, all routed through live PayMongo
+  // checkout — every manual method (GoTyme, Mari Bank, PayPal, generic QR)
+  // is hidden. In Manual mode, Card disappears (there's no manual
+  // equivalent for it) and every manual-transfer method is offered
+  // instead, with GCash/Maya falling back to their manual (staff-verified)
+  // path. Called any time the chooser is (re)rendered — see
+  // applyMerchantLogosToChooser's call sites.
+  function updatePaymentMethodChooserVisibility() {
+    const chooser = document.getElementById('paymentMethodChooser');
+    if (!chooser) return;
+    const payMongoMode = isLiveMethod('card'); // true only when PayMongo is fully enabled + configured
+    const manualOnlyMethods = ['gotyme', 'maribank', 'paypal', 'qr'];
+    chooser.querySelectorAll('.pm-choice-btn').forEach(btn => {
+      const method = btn.getAttribute('data-method');
+      let visible;
+      if (method === 'card') {
+        visible = payMongoMode;
+      } else if (manualOnlyMethods.includes(method)) {
+        visible = !payMongoMode;
+      } else {
+        visible = true; // gcash / maya are always offered, live or manual
+      }
+      btn.style.display = visible ? '' : 'none';
+    });
+    // If a previously-selected method just got hidden by a mode change,
+    // clear the selection so the customer can't submit against a method
+    // that's no longer actually offered.
+    if (selectedPaymentMethod) {
+      const stillVisible = chooser.querySelector(`.pm-choice-btn[data-method="${selectedPaymentMethod}"]`);
+      if (!stillVisible || stillVisible.style.display === 'none') {
+        selectedPaymentMethod = null;
+        document.getElementById('paymentLivePanel').style.display = 'none';
+        document.getElementById('paymentManualPanel').style.display = 'none';
+        document.getElementById('payMembershipBtn').innerText = 'Select a Payment Method';
+      }
+    }
+  }
+
+  // ---- Admin: Payment Mode switch (Manual vs PayMongo Direct) ----
+  // Drives the hidden #adminPaymongoEnabled checkbox that saveAdminSettings
+  // already reads, so nothing about the save pipeline needs to change.
+  function setAdminPaymentMode(mode) {
+    if (mode === 'paymongo' && !paymongoAvailable) return; // can't switch until server has a key
+    document.getElementById('adminPaymongoEnabled').checked = (mode === 'paymongo');
+    renderAdminPaymentModeButtons();
+  }
+
+  function renderAdminPaymentModeButtons() {
+    const manualBtn = document.getElementById('adminPayModeManualBtn');
+    const paymongoBtn = document.getElementById('adminPayModePaymongoBtn');
+    const statusLabel = document.getElementById('adminPaymongoStatusLabel');
+    if (!manualBtn || !paymongoBtn) return;
+    const enabled = document.getElementById('adminPaymongoEnabled').checked;
+
+    const setActive = (btn, active) => {
+      btn.style.background = active ? 'var(--accent)' : 'transparent';
+      btn.style.color = active ? '#fff' : 'var(--text-main)';
+      btn.style.borderColor = active ? 'var(--accent)' : '';
+    };
+    setActive(manualBtn, !enabled);
+    setActive(paymongoBtn, enabled);
+
+    paymongoBtn.disabled = !paymongoAvailable;
+    paymongoBtn.style.opacity = paymongoAvailable ? '1' : '0.5';
+    paymongoBtn.style.cursor = paymongoAvailable ? 'pointer' : 'not-allowed';
+
+    statusLabel.innerText = paymongoAvailable
+      ? 'Choose how customers pay for membership.'
+      : 'PayMongo Direct is unavailable until the server has a PayMongo secret key configured (see README) — customers will use Manual payment until then.';
   }
 
   async function handleGalleryUpload(event) {
@@ -10426,11 +10502,8 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
 
     const merchant = appSettings.merchant || {};
     document.getElementById('adminMerchantServerNotice').style.display = serverBacked ? 'none' : 'flex';
-    document.getElementById('adminPaymongoEnabled').checked = !!merchant.paymongoEnabled;
-    document.getElementById('adminPaymongoStatusLabel').innerText = paymongoAvailable
-      ? 'Server has a PayMongo key configured. Toggle this on to accept live Card / GCash / Maya payments.'
-      : 'The server has NOT set a PayMongo secret key yet, so this can\'t be turned on until that\'s configured (see README).';
-    document.getElementById('adminPaymongoEnabled').disabled = !paymongoAvailable;
+    document.getElementById('adminPaymongoEnabled').checked = !!merchant.paymongoEnabled && paymongoAvailable;
+    renderAdminPaymentModeButtons();
     document.getElementById('adminGcashName').value = (merchant.gcash && merchant.gcash.name) || '';
     document.getElementById('adminGcashNumber').value = (merchant.gcash && merchant.gcash.number) || '';
     document.getElementById('adminGcashQr').value = (merchant.gcash && merchant.gcash.qrImage) || '';
