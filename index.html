@@ -20,6 +20,10 @@
 <script type="text/javascript" src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <!-- face-api.js: real, client-side face detection + recognition (TensorFlow.js models), used for the barber login face scan -->
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+<!-- Supabase JS: staff (barber/admin/support) sign-up & login talk to Supabase
+     Auth directly from here — see supabaseClient below and docs/STAFF_ACCOUNTS.md.
+     Exposes a `supabase` global with .createClient(). -->
+<script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
   /* ---------- Theme & Color Palettes ---------- */
   :root {
@@ -5274,43 +5278,14 @@
       'MEM-12345': { name: 'Sample User', email: 'sample@example.com', phone: '09171234567', paidDate: '2026-09-01', active: true },
       'MEM-10001': { name: 'Dirk Santiago', email: 'dirksantiago@primus.com', phone: '09123456789', paidDate: '2026-09-14', active: true }
     },
-    // Test accounts for Dirk Santiago, covering the three account-based
-    // roles (Barber, Support, Admin) that log in through the Barber/Staff
-    // portal. All three share the password "aaaaaa" (SHA-256 hash below —
-    // hashPassword() never stores plaintext, so it's pre-hashed here too).
-    // Pre-approved and active so they're immediately usable for testing,
-    // rather than sitting in the normal pending-approval state a real
-    // sign-up would start in.
-    //
-    // Note: this is separate from the single site-wide Admin Settings
-    // password (appSettings.adminPassword, currently 'primusadmin2026')
-    // that unlocks the gear-icon settings dashboard — the "Admin" account
-    // below is a staff *portal* profile only (internal roster/status), not
-    // a way into that settings panel. Let me know if you actually want the
-    // Admin Settings password itself changed to "aaaaaa" instead/as well.
-    barberAccounts: [
-      {
-        id: 'barber_test_dirksantiago',
-        name: 'Dirk Santiago', username: 'dirk.barber', phone: '+19123456789', email: 'dirksantiago@primus.com',
-        passwordHash: 'ed02457b5c41d964dbd2f2a609d63fe1bb7528dbe55e1abf5b52c249cd735797',
-        bio: 'Test barber account for QA/demo purposes.', photo: '', position: 'Barber', role: 'barber', status: 'Active', supportPeerId: '',
-        active: true, approved: true
-      },
-      {
-        id: 'staff_test_dirksantiago_support',
-        name: 'Dirk Santiago', username: 'dirk.support', phone: '+19123456789', email: 'dirksantiago@primus.com',
-        passwordHash: 'ed02457b5c41d964dbd2f2a609d63fe1bb7528dbe55e1abf5b52c249cd735797',
-        bio: 'Test Support account for QA/demo purposes.', photo: '', position: 'Support', role: 'staff', status: 'Active', supportPeerId: '',
-        active: true, approved: true
-      },
-      {
-        id: 'staff_test_dirksantiago_admin',
-        name: 'Dirk Santiago', username: 'dirk.admin', phone: '+19123456789', email: 'dirksantiago@primus.com',
-        passwordHash: 'ed02457b5c41d964dbd2f2a609d63fe1bb7528dbe55e1abf5b52c249cd735797',
-        bio: '', photo: '', position: 'Admin', role: 'staff', status: 'Active', supportPeerId: '',
-        active: true, approved: true
-      }
-    ],
+    // Staff (barber/admin/support) accounts now live in Supabase Auth, not
+    // here — see docs/STAFF_ACCOUNTS.md. The three demo accounts that used
+    // to be seeded here are gone: they all shared one email address
+    // (dirksantiago@primus.com), which Supabase won't allow for three
+    // separate logins anyway. Create real ones from the site's own "Barber
+    // Login" sign-up form once SUPABASE_URL / SUPABASE_SECRET_KEY /
+    // SUPABASE_PUBLISHABLE_KEY are set on the server.
+    barberAccounts: [],
     bookings: [],
     // Where customer payments actually go. Filled in by Admin Panel >
     // Payment Merchant. Card/GCash/Maya can additionally run through a live
@@ -5367,6 +5342,14 @@
       delete fetched.xenditAvailable;
       aiChatAvailable = !!fetched.aiChatAvailable;
       delete fetched.aiChatAvailable;
+      // Public Supabase config (project URL + publishable key) for staff
+      // sign-up/login — safe to expose, same as any anon/publishable key.
+      // See supabaseAdmin.js on the server for what stays private.
+      window.__supabaseUrl = fetched.supabaseUrl || '';
+      window.__supabasePublishableKey = fetched.supabasePublishableKey || '';
+      delete fetched.supabaseUrl;
+      delete fetched.supabasePublishableKey;
+      delete fetched.supabaseAvailable;
       // adminPassword is deliberately withheld by the server's public
       // endpoint; keep using the locally-cached one (or default) for the
       // client-side password gate until an admin logs in and it's refreshed.
@@ -5431,6 +5414,33 @@
   }
 
   let paidMembers = appSettings.members;
+
+  // Talks to Supabase Auth directly from the browser for staff (barber /
+  // admin / support) sign-up and login — see docs/STAFF_ACCOUNTS.md. Stays
+  // null (every staff form shows a "not set up yet" message) until the
+  // server has SUPABASE_URL / SUPABASE_PUBLISHABLE_KEY configured.
+  const supabaseClient = (window.__supabaseUrl && window.__supabasePublishableKey && window.supabase)
+    ? window.supabase.createClient(window.__supabaseUrl, window.__supabasePublishableKey)
+    : null;
+
+  // Syncs a small set of self-editable fields (see STAFF_SELF_EDITABLE_FIELDS
+  // in server.js) for the CURRENTLY LOGGED IN barber/staff member, using
+  // their own Supabase session. Unlike persistSettings(), this never needs
+  // (or sends) the site's Admin Password — it can only ever touch that one
+  // person's own record.
+  async function patchOwnStaffAccount(fields) {
+    if (!supabaseClient) return;
+    try {
+      const { data } = await supabaseClient.auth.getSession();
+      const token = data && data.session && data.session.access_token;
+      if (!token) return;
+      await fetch('/api/staff/me', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(fields),
+      });
+    } catch (e) { console.warn('Could not sync your profile to the server (offline?):', e); }
+  }
 
   // Saves the whole appSettings blob back to the server (so every device
   // sees the same admin settings + memberships), with a localStorage
@@ -6636,23 +6646,26 @@ let currentReviewBarber = '';
     } catch (e) { /* localStorage unavailable — just stay logged out */ }
 
     // ---------- Restore a logged-in barber's session across a refresh ----------
-    // A barber who logged in stays logged in (independent of admin mode)
-    // until they explicitly click Log Out in their dashboard.
-    try {
-      const savedBarberId = localStorage.getItem('primus_barber_session');
-      if (savedBarberId) {
-        const acct = (appSettings.barberAccounts || []).find(b => b.id === savedBarberId);
-        if (acct) {
-          currentBarberSession = acct.id;
-          acct.active = true;
-          renderTeamSection();
-          if (document.getElementById('step1BarberChips')) renderDynamicContent();
-        } else {
-          localStorage.removeItem('primus_barber_session');
+    // Supabase's own client already persists the session in this browser
+    // (see supabaseClient above) and auto-refreshes it, so this just asks
+    // who's currently signed in — no separate localStorage bookkeeping needed.
+    (async () => {
+      if (!supabaseClient) { updateBarberLoginButtonUI(); return; }
+      try {
+        const { data } = await supabaseClient.auth.getSession();
+        const userId = data && data.session && data.session.user && data.session.user.id;
+        if (userId) {
+          const acct = (appSettings.barberAccounts || []).find(b => b.id === userId);
+          if (acct) {
+            currentBarberSession = acct.id;
+            acct.active = true;
+            renderTeamSection();
+            if (document.getElementById('step1BarberChips')) renderDynamicContent();
+          }
         }
-      }
+      } catch (e) { /* offline or session expired — barber just needs to log in again */ }
       updateBarberLoginButtonUI();
-    } catch (e) { /* localStorage unavailable — barber just needs to log in again */ }
+    })();
   });
 
   // ---------- Back-to-Top button: liquid-glass "melt" show/hide + droplet click ----------
@@ -8376,11 +8389,21 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     return dial ? `+${dial} ${local}` : local;
   }
 
-  // ---------- Barber accounts: hashing, admin management, public team section ----------
-  async function hashPassword(pw) {
-    const enc = new TextEncoder().encode(pw);
-    const digest = await crypto.subtle.digest('SHA-256', enc);
-    return Array.from(new Uint8Array(digest)).map(b => b.toString(16).padStart(2, '0')).join('');
+  // ---------- Barber accounts: Supabase-backed auth, admin management, public team section ----------
+  // Passwords are no longer hashed or stored here — sign-up, login, and
+  // password changes talk to Supabase Auth directly via supabaseClient (see
+  // above), or to the small set of /api/staff/* server routes. This helper
+  // covers the few admin-only staff actions (reset password, delete) that
+  // still go through this browser's own cached Admin Settings password,
+  // exactly like persistSettings() already does for everything else.
+  async function callStaffAdminApi(path, options = {}) {
+    const resp = await fetch(path, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', 'x-admin-password': appSettings.adminPassword || '', ...(options.headers || {}) },
+    });
+    const json = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(json.error || 'Request failed.');
+    return json;
   }
 
   // A barber with an account is only "bookable"/visible while that account
@@ -8660,6 +8683,8 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       danger: true
     });
     if (!confirmed) return;
+    try { await callStaffAdminApi(`/api/staff/${encodeURIComponent(id)}`, { method: 'DELETE' }); }
+    catch (e) { console.warn('Could not remove the Supabase login for this account:', e.message); }
     appSettings.barberAccounts = appSettings.barberAccounts.filter(b => b.id !== id);
     persistSettings();
     renderAdminBarberAccounts();
@@ -8721,8 +8746,12 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       await openGenericModal({ title: 'Password Too Short', message: 'Password must be at least 6 characters. Please try again.', confirmLabel: 'OK' });
       return;
     }
-    acct.passwordHash = await hashPassword(newPw);
-    persistSettings();
+    try {
+      await callStaffAdminApi('/api/staff/reset-password', { method: 'POST', body: JSON.stringify({ id: acct.id, newPassword: newPw }) });
+    } catch (e) {
+      await openGenericModal({ title: 'Could Not Reset Password', message: e.message || 'Please try again.', confirmLabel: 'OK' });
+      return;
+    }
     renderAdminBarberAccounts();
 
     const messageBody = `Hi ${acct.name}, your ${appSettings.businessName} barber account password was reset. New password: ${newPw} — please log in and change it soon.`;
@@ -8892,18 +8921,13 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       errEl.style.display = 'block';
       return;
     }
-    if (!phoneLocal && !email) {
-      errEl.textContent = 'Please provide either a phone number or an email address.';
+    if (!email || !isValidEmail(email)) {
+      errEl.textContent = 'Please enter a valid email address — it\'s how you\'ll log back in.';
       errEl.style.display = 'block';
       return;
     }
     if (phoneLocal && !isValidPhone(phoneLocal)) {
       errEl.textContent = 'Please select your country and enter a valid phone number (7–10 digits).';
-      errEl.style.display = 'block';
-      return;
-    }
-    if (email && !isValidEmail(email)) {
-      errEl.textContent = 'Please enter a valid email address.';
       errEl.style.display = 'block';
       return;
     }
@@ -8922,31 +8946,56 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       errEl.style.display = 'block';
       return;
     }
+    if (!supabaseClient) {
+      errEl.textContent = 'Staff accounts are not set up on this server yet — ask the shop owner to finish setup.';
+      errEl.style.display = 'block';
+      return;
+    }
 
-    const passwordHash = await hashPassword(pw);
     const newBarber = {
-      id: 'barber_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-      name, username, phone, email, passwordHash,
-      bio: '', photo: '', position: 'Barber', role: 'barber', status: 'Active', supportPeerId: '',
-      active: true, approved: false
+      name, username, phone, email,
+      position: 'Barber', _password: pw,
     };
 
     // Account isn't created yet — every sign-up (barber, admin, or support)
-    // must first register a Face ID via the 4-direction liveness scan.
+    // must first register a Face ID via the 4-direction liveness scan. The
+    // real account (and its Supabase login) gets created in
+    // finishBarberSignup, once the scan succeeds.
     openSignupFaceScan('barber', newBarber);
   }
 
   // Called once Face ID registration succeeds during a barber sign-up.
-  function finishBarberSignup(newBarber) {
-    appSettings.barberAccounts.push(newBarber);
-    if (!appSettings.barbers.includes(newBarber.name)) appSettings.barbers.push(newBarber.name);
-    persistSettings();
+  // This is where the account (and its Supabase login) actually gets
+  // created — everything before this point was just local form state.
+  async function finishBarberSignup(newBarber) {
+    const errEl = document.getElementById('barberSignupErr');
+    const { _password: password, ...draft } = newBarber;
+    let account;
+    try {
+      const resp = await fetch('/api/staff/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...draft, password, turnstileToken }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(json.error || 'Could not create your account.');
+      account = json.account;
+    } catch (err) {
+      cancelSignupFaceScan(true);
+      document.getElementById('barberSignupPane').style.display = '';
+      errEl.textContent = err.message || 'Could not create your account — please try again.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    appSettings.barberAccounts.push(account);
+    if (!appSettings.barbers.includes(account.name)) appSettings.barbers.push(account.name);
     renderTeamSection();
     renderAdminBarberAccounts();
     if (document.getElementById('step1BarberChips')) renderDynamicContent();
 
-    currentBarberSession = newBarber.id;
-    try { localStorage.setItem('primus_barber_session', newBarber.id); } catch (e) {}
+    if (supabaseClient) await supabaseClient.auth.signInWithPassword({ email: account.email, password });
+    currentBarberSession = account.id;
     updateBarberLoginButtonUI();
     closeBarberPortal();
     openBarberDashboard();
@@ -8978,18 +9027,13 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       errEl.style.display = 'block';
       return;
     }
-    if (!phoneLocal && !email) {
-      errEl.textContent = 'Please provide either a phone number or an email address.';
+    if (!email || !isValidEmail(email)) {
+      errEl.textContent = 'Please enter a valid email address — it\'s how you\'ll log back in.';
       errEl.style.display = 'block';
       return;
     }
     if (phoneLocal && !isValidPhone(phoneLocal)) {
       errEl.textContent = 'Please select your country and enter a valid phone number (7–10 digits).';
-      errEl.style.display = 'block';
-      return;
-    }
-    if (email && !isValidEmail(email)) {
-      errEl.textContent = 'Please enter a valid email address.';
       errEl.style.display = 'block';
       return;
     }
@@ -9008,31 +9052,53 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       errEl.style.display = 'block';
       return;
     }
+    if (!supabaseClient) {
+      errEl.textContent = 'Staff accounts are not set up on this server yet — ask the shop owner to finish setup.';
+      errEl.style.display = 'block';
+      return;
+    }
 
-    const passwordHash = await hashPassword(pw);
     const newStaff = {
-      id: 'staff_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
-      name, username, phone, email, passwordHash,
-      bio: '', photo: '', position: position || 'Support', role: 'staff', status: 'Active', supportPeerId: '',
-      active: false, approved: false
+      name, username, phone, email,
+      position: position || 'Support', _password: pw,
     };
 
     // Account isn't created yet — every sign-up (barber, admin, or support)
-    // must first register a Face ID via the 4-direction liveness scan.
+    // must first register a Face ID via the 4-direction liveness scan. The
+    // real account (and its Supabase login) gets created in
+    // finishStaffSignup, once the scan succeeds.
     openSignupFaceScan('staff', newStaff);
   }
 
   // Called once Face ID registration succeeds during an Admin/Support sign-up.
-  function finishStaffSignup(newStaff) {
-    appSettings.barberAccounts.push(newStaff);
-    persistSettings();
-    renderAdminBarberAccounts();
-
+  async function finishStaffSignup(newStaff) {
     const errEl = document.getElementById('staffSignupErr');
+    const { _password: password, ...draft } = newStaff;
+    let account;
+    try {
+      const resp = await fetch('/api/staff/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...draft, password, turnstileToken }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(json.error || 'Could not create your account.');
+      account = json.account;
+    } catch (err) {
+      cancelSignupFaceScan(true);
+      document.getElementById('staffSignupPane').style.display = '';
+      errEl.style.color = '';
+      errEl.textContent = err.message || 'Could not create your account — please try again.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    appSettings.barberAccounts.push(account);
+    renderAdminBarberAccounts();
 
     // Support (call-center) accounts cannot log in at all until an admin
     // approves them — no auto-login here, unlike barber/admin sign-ups.
-    if (newStaff.position === 'Support') {
+    if (account.position === 'Support') {
       errEl.style.color = '#10b981';
       errEl.textContent = 'Account created! A Support account must be approved by an admin before you can log in — please check back later.';
       errEl.style.display = 'block';
@@ -9040,9 +9106,8 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       return;
     }
 
-    currentBarberSession = newStaff.id;
-    newStaff.active = true;
-    try { localStorage.setItem('primus_barber_session', newStaff.id); } catch (e) {}
+    if (supabaseClient) await supabaseClient.auth.signInWithPassword({ email: account.email, password });
+    currentBarberSession = account.id;
     updateBarberLoginButtonUI();
     closeBarberPortal();
     openBarberDashboard();
@@ -9079,8 +9144,13 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       errEl.style.display = 'block';
       return;
     }
-    const hash = await hashPassword(pw);
-    if (hash !== acct.passwordHash) {
+    if (!acct.email || !supabaseClient) {
+      errEl.textContent = 'This account needs to be recreated — please sign up again.';
+      errEl.style.display = 'block';
+      return;
+    }
+    const { error } = await supabaseClient.auth.signInWithPassword({ email: acct.email, password: pw });
+    if (error) {
       errEl.textContent = 'Incorrect password.';
       errEl.style.display = 'block';
       return;
@@ -9091,6 +9161,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     if (acct.role === 'staff' && acct.position === 'Support' && acct.approved === false) {
       errEl.textContent = 'Your Support account is awaiting admin approval. Please check back once it has been approved.';
       errEl.style.display = 'block';
+      supabaseClient.auth.signOut();
       return;
     }
 
@@ -9105,6 +9176,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
   function finalizeBarberLogin(acct) {
     if (acct.role === 'staff' && acct.position === 'Support' && acct.approved === false) {
       resetBarberFaceScan();
+      if (supabaseClient) supabaseClient.auth.signOut();
       const errEl = document.getElementById('barberLoginErr');
       if (errEl) { errEl.textContent = 'Your Support account is awaiting admin approval.'; errEl.style.display = 'block'; }
       return;
@@ -9121,10 +9193,9 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     currentBarberSession = acct.id;
     acct.active = true;
     if (!acct.status) acct.status = 'Active';
-    persistSettings();
+    patchOwnStaffAccount({ active: true, status: acct.status });
     renderTeamSection();
     if (document.getElementById('step1BarberChips')) renderDynamicContent();
-    try { localStorage.setItem('primus_barber_session', acct.id); } catch (e) {}
     updateBarberLoginButtonUI();
     closeBarberPortal();
     openBarberDashboard();
@@ -9305,7 +9376,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       if (!acct.faceDescriptor) {
         // No Face ID on file yet for this account — this scan enrolls one.
         acct.faceDescriptor = descriptor;
-        persistSettings();
+        patchOwnStaffAccount({ faceDescriptor: acct.faceDescriptor });
         statusEl.textContent = 'Face ID set up ✅';
       } else {
         // Compare against the stored descriptor by Euclidean distance —
@@ -9794,7 +9865,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     const usernameSlug = (barber.username || 'staff').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     const suffix = Math.random().toString(36).slice(2, 6);
     barber.supportPeerId = `support-${usernameSlug}-${suffix}`;
-    persistSettings();
+    patchOwnStaffAccount({ supportPeerId: barber.supportPeerId });
     renderAdminBarberAccounts();
     document.getElementById('barberDashSupportIdValue').textContent = barber.supportPeerId;
     document.getElementById('barberDashOpenConsoleBtn').style.display = '';
@@ -9825,7 +9896,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       barber.photo = photoPreview.dataset.pending;
       delete photoPreview.dataset.pending;
     }
-    persistSettings();
+    patchOwnStaffAccount({ status: barber.status, bio: barber.bio, photo: barber.photo });
     renderTeamSection();
     renderAdminBarberAccounts();
     if (document.getElementById('step1BarberChips')) renderDynamicContent();
@@ -9861,9 +9932,20 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       errEl.style.display = 'block';
       return;
     }
+    if (!supabaseClient) {
+      errEl.textContent = 'Staff accounts are not set up on this server yet.';
+      errEl.style.display = 'block';
+      return;
+    }
 
-    barber.passwordHash = await hashPassword(pw);
-    persistSettings();
+    // Goes straight to Supabase using this browser's own current session —
+    // the server never sees or stores the new password.
+    const { error } = await supabaseClient.auth.updateUser({ password: pw });
+    if (error) {
+      errEl.textContent = error.message || 'Could not update your password.';
+      errEl.style.display = 'block';
+      return;
+    }
     document.getElementById('barberDashNewPassword').value = '';
     document.getElementById('barberDashNewPassword2').value = '';
     successEl.style.display = 'block';
@@ -9902,12 +9984,12 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
         closeCallConsole(true);
       }
       barber.active = false;
-      persistSettings();
+      patchOwnStaffAccount({ active: false });
       renderTeamSection();
       if (document.getElementById('step1BarberChips')) renderDynamicContent();
     }
     currentBarberSession = null;
-    try { localStorage.removeItem('primus_barber_session'); } catch (e) {}
+    if (supabaseClient) supabaseClient.auth.signOut();
     updateBarberLoginButtonUI();
     closeBarberDashboard();
   }
@@ -12628,7 +12710,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     } else if (!acct.isLive) {
       acct.liveSince = null;
     }
-    persistSettings();
+    patchOwnStaffAccount({ isLive: acct.isLive, liveHeartbeat: acct.liveHeartbeat, liveSince: acct.liveSince });
   }
 
   function startConsoleHeartbeat() {
@@ -13028,7 +13110,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     const wasOwner = consoleOwnerAccountId;
     if (wasOwner) {
       const acct = (appSettings.barberAccounts || []).find(b => b.id === wasOwner);
-      if (acct) { acct.isLive = false; acct.liveHeartbeat = Date.now(); acct.liveSince = null; persistSettings(); }
+      if (acct) { acct.isLive = false; acct.liveHeartbeat = Date.now(); acct.liveSince = null; patchOwnStaffAccount({ isLive: false, liveHeartbeat: acct.liveHeartbeat, liveSince: null }); }
     }
     consoleOwnerAccountId = null;
     document.getElementById('callConsoleDock').classList.remove('open');
@@ -13136,7 +13218,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     // treats it exactly like a close the moment it sees one.
     if (consoleOwnerAccountId) {
       const acct = (appSettings.barberAccounts || []).find(b => b.id === consoleOwnerAccountId);
-      if (acct) { acct.lastDeclineAt = Date.now(); persistSettings(); }
+      if (acct) { acct.lastDeclineAt = Date.now(); patchOwnStaffAccount({ lastDeclineAt: acct.lastDeclineAt }); }
     }
 
     // Deliberately no cooldown/skip is applied here. This agent is still

@@ -16,6 +16,19 @@
  *   POST /api/payments/paymongo/webhook   PayMongo calls this on payment (reliable confirmation)
  *   POST /api/payments/xendit/webhook     Xendit calls this on payment (reliable confirmation)
  *   POST /api/ai-chat                     advanced AI chat (optional)
+ *   POST /api/staff/signup                 public: create a barber/admin/support account (Supabase-backed)
+ *   PATCH /api/staff/me                    staff-only (own Supabase session): update own profile fields
+ *   POST /api/staff/reset-password         admin-only: reset a staff member's password
+ *   DELETE /api/staff/:id                  admin-only: remove a staff member's Supabase login
+ *
+ * STAFF ACCOUNTS (barber / admin / support)
+ * ------------------------------------------
+ * Login credentials for these live in Supabase Auth, not state.json — see
+ * supabaseAdmin.js and docs/STAFF_ACCOUNTS.md. Everything else about a staff
+ * member (name, bio, photo, status, approval, position) still lives in
+ * state.json's `barberAccounts` array exactly as before. The site owner's
+ * single Admin Password (below) is unchanged and still gates the Owner
+ * Console + the main site's Admin Settings panel.
  *
  * Only one live gateway (PayMongo or Xendit) is ever active for customers at
  * a time — see merchant.paymongoEnabled / merchant.xenditEnabled in state and
@@ -65,6 +78,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const mailer = require('./mailer'); // Resend-backed transactional email (see mailer.js)
+const supabaseAdmin = require('./supabaseAdmin'); // Supabase Auth for staff accounts (see supabaseAdmin.js)
 
 const app = express();
 app.set('trust proxy', true); // Render sits behind a proxy; needed for correct req.protocol
@@ -346,6 +360,7 @@ app.get('/api/state', (req, res) => {
   publicState.paymongoAvailable = !!PAYMONGO_SECRET_KEY;
   publicState.xenditAvailable = !!XENDIT_SECRET_KEY;
   publicState.aiChatAvailable = !!(ANTHROPIC_API_KEY || OPENAI_API_KEY || GEMINI_API_KEY);
+  Object.assign(publicState, supabaseAdmin.publicConfig()); // supabaseUrl / supabasePublishableKey / supabaseAvailable — all safe to expose
   res.json(publicState);
 });
 
@@ -355,6 +370,26 @@ app.post('/api/state', (req, res) => {
   const incoming = req.body || {};
   // Preserve internal bookkeeping that the client doesn't know about.
   const merged = { ...state, ...incoming, _payments: state._payments || {} };
+
+  // /api/staff/me (and the customer call-routing heartbeat) are the only
+  // things that should ever move these fields — they change many times a
+  // minute while someone's Live on the call console. A full-state save from
+  // an admin's tab holding an older in-memory copy of barberAccounts (e.g.
+  // a settings edit made a while after that tab's last page load) must
+  // never clobber them back to a stale value, so this always keeps
+  // whatever the server currently has for these, regardless of what this
+  // particular save's copy of barberAccounts says.
+  const VOLATILE_STAFF_FIELDS = ['isLive', 'liveHeartbeat', 'liveSince', 'ringHeartbeat', 'lastDeclineAt'];
+  if (Array.isArray(merged.barberAccounts) && Array.isArray(state.barberAccounts)) {
+    const currentById = new Map(state.barberAccounts.map(a => [a.id, a]));
+    merged.barberAccounts = merged.barberAccounts.map(a => {
+      const current = currentById.get(a.id);
+      if (!current) return a;
+      const kept = { ...a };
+      for (const key of VOLATILE_STAFF_FIELDS) kept[key] = current[key];
+      return kept;
+    });
+  }
 
   // A manual-transfer membership starts as { active:false, pendingVerification:true }
   // (see /api/payments/manual below) and staff approves it from the Admin
@@ -393,6 +428,136 @@ app.get('/api/admin/state', (req, res) => {
   const out = { ...state };
   delete out._payments;
   res.json(out);
+});
+
+// ---------------------------------------------------------------------------
+// Staff accounts (barber / admin / support) — Supabase-backed
+// ---------------------------------------------------------------------------
+// This is the fix for "the shared admin password problem" described in the
+// project notes: self-service sign-up used to require the client to know
+// (or embed a default copy of) the SAME single password that gates the
+// entire site's state, and every staff member's password hash was readable
+// by anyone who hit GET /api/state. Neither is true anymore — sign-up and
+// login below only ever talk to Supabase Auth, and never touch or need the
+// site's Admin Password. Reset/delete stay admin-only (requireAdmin) since
+// those are the same privileged actions the Owner Console already gates.
+
+// Verifies the bearer token a staff member's own browser holds after
+// signing in with Supabase, and attaches who they are to req.staff. This
+// only ever proves "who is making this request" — it does NOT grant any
+// elevated privilege, so /api/staff/me below can only ever touch that one
+// person's own record.
+async function requireStaffSelf(req, res, next) {
+  const authHeader = req.get('authorization') || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  const staff = token ? await supabaseAdmin.verifyStaffToken(token) : null;
+  if (!staff) return res.status(401).json({ error: 'Your session has expired — please log in again.' });
+  req.staff = staff;
+  next();
+}
+
+app.post('/api/staff/signup', checkOrigin, paymentLimiter, async (req, res) => {
+  if (!supabaseAdmin.isConfigured()) {
+    return res.status(503).json({ error: 'Staff accounts are not set up on this server yet — ask the shop owner to finish the Supabase setup.' });
+  }
+  const { name, username, email, phone, password, position, bio, photo, faceDescriptor, turnstileToken } = req.body || {};
+  const cleanName = (name || '').trim();
+  const cleanUsername = (username || '').trim().toLowerCase();
+  const cleanEmail = (email || '').trim();
+  if (!cleanName || !cleanUsername || !cleanEmail || !password) {
+    return res.status(400).json({ error: 'name, username, email, and password are required.' });
+  }
+  if (password.length < 6) {
+    return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+  }
+  const human = await verifyTurnstile(turnstileToken, req.ip);
+  if (!human) {
+    return res.status(403).json({ error: 'Verification failed. Please refresh the page and try again.' });
+  }
+
+  const state = readState();
+  if (!state.barberAccounts) state.barberAccounts = [];
+  if (state.barberAccounts.some(a => (a.username || '').toLowerCase() === cleanUsername)) {
+    return res.status(409).json({ error: 'That username is already taken.' });
+  }
+
+  let authUser;
+  try {
+    authUser = await supabaseAdmin.createStaffAuthUser({ email: cleanEmail, password });
+  } catch (err) {
+    const taken = err.status === 422 || /already.*(registered|exists)/i.test(err.message || '');
+    return res.status(400).json({ error: taken ? 'That email is already registered.' : 'Could not create the account — please try again.' });
+  }
+
+  const pos = position === 'Admin' || position === 'Support' ? position : 'Barber';
+  const role = pos === 'Barber' ? 'barber' : 'staff';
+  const approved = pos !== 'Support'; // matches the existing workflow: only Support needs admin approval
+
+  const record = {
+    id: authUser.id, name: cleanName, username: cleanUsername, phone: phone || '', email: cleanEmail,
+    role, position: pos, status: 'Active', supportPeerId: '',
+    bio: bio || '', photo: photo || '', faceDescriptor: faceDescriptor || null,
+    active: approved, approved,
+  };
+  state.barberAccounts.push(record);
+  if (role === 'barber') {
+    state.barbers = state.barbers || [];
+    if (!state.barbers.includes(cleanName)) state.barbers.push(cleanName);
+  }
+
+  try {
+    writeState(state);
+  } catch (err) {
+    // Filesystem hiccup — undo the Supabase user so there's no orphaned
+    // login with no matching profile in state.json.
+    supabaseAdmin.deleteStaffAuthUser(authUser.id).catch(() => {});
+    console.error('[staff-signup] writeState failed:', err);
+    return res.status(500).json({ error: 'Could not save your account — please try again.' });
+  }
+
+  res.json({ account: record });
+});
+
+// A logged-in staff member updating their OWN profile — bio/photo/status/
+// live-call fields. Deliberately a short whitelist: name, username, phone,
+// email, position, and approval stay admin-only (via the existing /api/state
+// route + Owner Console / Admin Settings, both still gated by the Admin
+// Password), exactly matching today's "can't touch your own name/email" rule.
+const STAFF_SELF_EDITABLE_FIELDS = ['status', 'bio', 'photo', 'supportPeerId', 'active', 'isLive', 'liveHeartbeat', 'liveSince', 'lastDeclineAt', 'faceDescriptor'];
+
+app.patch('/api/staff/me', requireStaffSelf, (req, res) => {
+  const state = readState();
+  const acct = (state.barberAccounts || []).find(a => a.id === req.staff.id);
+  if (!acct) return res.status(404).json({ error: 'Account not found.' });
+  for (const key of STAFF_SELF_EDITABLE_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(req.body || {}, key)) acct[key] = req.body[key];
+  }
+  writeState(state);
+  res.json({ account: acct });
+});
+
+app.post('/api/staff/reset-password', (req, res) => {
+  const state = readState();
+  if (!requireAdmin(req, res, state)) return;
+  if (!supabaseAdmin.isConfigured()) {
+    return res.status(503).json({ error: 'Staff accounts are not set up on this server yet.' });
+  }
+  const { id, newPassword } = req.body || {};
+  if (!id || !newPassword || newPassword.length < 6) {
+    return res.status(400).json({ error: 'id and a newPassword of at least 6 characters are required.' });
+  }
+  supabaseAdmin.updateStaffPassword(id, newPassword)
+    .then(() => res.json({ ok: true }))
+    .catch(() => res.status(400).json({ error: 'Could not reset that password — this account may not have a Supabase login yet (created before Supabase was set up?).' }));
+});
+
+app.delete('/api/staff/:id', (req, res) => {
+  const state = readState();
+  if (!requireAdmin(req, res, state)) return;
+  if (!supabaseAdmin.isConfigured()) return res.json({ ok: true }); // nothing to clean up
+  supabaseAdmin.deleteStaffAuthUser(req.params.id)
+    .catch((err) => console.warn('[staff-delete] could not delete Supabase user', req.params.id, err.message))
+    .finally(() => res.json({ ok: true }));
 });
 
 // ---------------------------------------------------------------------------

@@ -1020,6 +1020,7 @@
     const a = accounts().find(x => x.id === id);
     if (!a) return;
     if (!confirm(`Reject and delete the sign-up for ${a.name}? This can't be undone.`)) return;
+    try { await fetch(`/api/staff/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { 'x-admin-password': ownerPasswordCache } }); } catch (e) {}
     appSettings.barberAccounts = accounts().filter(x => x.id !== id);
     await persistFullState();
     renderAll();
@@ -1091,6 +1092,7 @@
     const a = accounts().find(x => x.id === id);
     if (!a) return;
     if (!confirm(`Delete the account for ${a.name}? This can't be undone.`)) return;
+    try { await fetch(`/api/staff/${encodeURIComponent(id)}`, { method: 'DELETE', headers: { 'x-admin-password': ownerPasswordCache } }); } catch (e) {}
     appSettings.barberAccounts = accounts().filter(x => x.id !== id);
     await persistFullState();
     renderAll();
@@ -1200,9 +1202,19 @@
     if (!a) return;
     const newPassword = prompt(`New password for ${a.name}:`);
     if (!newPassword) return;
-    if (newPassword.length < 4) { alert('Password should be at least 4 characters.'); return; }
-    a.passwordHash = await hashPassword(newPassword);
-    await persistFullState();
+    if (newPassword.length < 6) { alert('Password should be at least 6 characters.'); return; }
+    try {
+      const resp = await fetch('/api/staff/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-admin-password': ownerPasswordCache },
+        body: JSON.stringify({ id: a.id, newPassword }),
+      });
+      const json = await resp.json().catch(() => ({}));
+      if (!resp.ok) throw new Error(json.error || 'Could not reset that password.');
+    } catch (e) {
+      toast(e.message || "Couldn't reset that password.");
+      return;
+    }
     toast(`Password reset for ${a.name}.`);
 
     // Best-effort delivery — the account owner still needs to be told the

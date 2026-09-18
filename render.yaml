@@ -23,3 +23,19 @@ services:
       #                         scripted/bot submissions to the payment forms
       # - ALLOWED_ORIGIN        e.g. https://primus-barbershop.onrender.com —
       #                         rejects payment POSTs from other origins
+      # - SUPABASE_URL          e.g. https://xxxxxxxx.supabase.co — Project
+      #                         Settings > API in the Supabase dashboard.
+      #                         Powers staff (barber/admin/support) accounts —
+      #                         see docs/STAFF_ACCOUNTS.md.
+      # - SUPABASE_SECRET_KEY   Project Settings > API Keys > Secret keys
+      #                         (starts with sb_secret_...). On an older
+      #                         project without the new key types yet, use the
+      #                         "service_role" key from the Legacy API Keys tab
+      #                         instead — same env var name either way. Server-
+      #                         side only — never put this in index.html/owner.html.
+      # - SUPABASE_PUBLISHABLE_KEY  Project Settings > API Keys > Publishable
+      #                         key (starts with sb_publishable_...). Older
+      #                         project: use the "anon" key from Legacy API
+      #                         Keys instead — same env var name. This one IS
+      #                         safe to expose — the server hands it to
+      #                         index.html/owner.html itself via /api/state.
