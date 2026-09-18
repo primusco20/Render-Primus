@@ -1,0 +1,48 @@
+services:
+  - type: web
+    name: primus-barbershop
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: 20.11.0
+      # Add these in the Render dashboard (Settings > Environment) — do not
+      # commit real secrets into this file:
+      # - PAYMONGO_SECRET_KEY
+      # - ANTHROPIC_API_KEY
+      # - OPENAI_API_KEY
+      # - GEMINI_API_KEY
+      # - RESEND_API_KEY        from resend.com/api-keys — sends receipt/card emails
+      # - FROM_EMAIL            e.g. "Primus Barbershop <membership@yourdomain.com>"
+      #                         must be on a domain verified in Resend (SPF+DKIM) —
+      #                         see docs/EMAIL_SETUP.md
+      # - TURNSTILE_SECRET_KEY  from the Cloudflare Turnstile dashboard — blocks
+      #                         scripted/bot submissions to the payment forms
+      # - ALLOWED_ORIGIN        e.g. https://primus-barbershop.onrender.com —
+      #                         rejects payment POSTs from other origins
+      # - SUPABASE_URL          e.g. https://xxxxxxxx.supabase.co — Project
+      #                         Settings > API in the Supabase dashboard.
+      #                         Powers staff (barber/admin/support) accounts —
+      #                         see docs/STAFF_ACCOUNTS.md.
+      # - SUPABASE_SECRET_KEY   Project Settings > API Keys > Secret keys
+      #                         (starts with sb_secret_...). On an older
+      #                         project without the new key types yet, use the
+      #                         "service_role" key from the Legacy API Keys tab
+      #                         instead — same env var name either way. Server-
+      #                         side only — never put this in index.html/owner.html.
+      # - SUPABASE_PUBLISHABLE_KEY  Project Settings > API Keys > Publishable
+      #                         key (starts with sb_publishable_...). Older
+      #                         project: use the "anon" key from Legacy API
+      #                         Keys instead — same env var name. This one IS
+      #                         safe to expose — the server hands it to
+      #                         index.html/owner.html itself via /api/state.
+      # - OWNER_EMAILS          comma-separated list of email(s) allowed to sign
+      #                         in as owner/admin via Supabase (e.g. the shop
+      #                         owner, plus any partners). Create each login
+      #                         with `node scripts/create-owner.js <email>
+      #                         <password>` first — see docs/STAFF_ACCOUNTS.md.
+      #                         The legacy Admin Password keeps working either
+      #                         way, so this is safe to leave unset for now.
