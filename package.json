@@ -1,0 +1,16 @@
+{
+  "name": "primus-barbershop-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Express backend (state storage + payments + AI chat) for index.html / owner.html, deployed on Render.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
