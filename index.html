@@ -5411,11 +5411,24 @@
     if (b.ringHeartbeat === undefined) b.ringHeartbeat = 0; // timestamp of the customer's last "still ringing you" heartbeat — see startCustomerRingHeartbeat / startConsoleRingWatchdog
   });
   if (!appSettings.bookings) appSettings.bookings = [];
+
+  // The public /api/state no longer sends customer records — it sends
+  // `memberStatuses`, a membership-number -> { active } map with no name,
+  // email, phone or payment reference in it. Shaping it into the same
+  // structure the page already expects keeps every "is this membership
+  // usable?" check working untouched, while the personal details simply
+  // aren't in the browser any more. An admin session replaces this wholesale
+  // with the real records after GET /api/admin/state (see hasFullState).
   if (!appSettings.members) {
-    appSettings.members = JSON.parse(localStorage.getItem('primus_paid_members')) || defaultAppSettings.members;
+    appSettings.members = appSettings.memberStatuses || defaultAppSettings.members;
   }
 
   let paidMembers = appSettings.members;
+
+  // True only once this page has loaded the unprojected state as an admin.
+  // Gates the x-full-state header on saves, so a customer-side page can never
+  // POST its projection back over the real member and booking records.
+  let hasFullState = false;
 
   // Talks to Supabase Auth directly from the browser for staff (barber /
   // admin / support) sign-up and login — see docs/STAFF_ACCOUNTS.md. Stays
@@ -5450,11 +5463,18 @@
   // the admin password server-side too, not just in this browser.
   function persistState() {
     localStorage.setItem('primus_admin_settings', JSON.stringify(appSettings));
-    localStorage.setItem('primus_paid_members', JSON.stringify(paidMembers));
+    // Deliberately not cached: keeping customer records in the browser would put back exactly what removing them from /api/state prevents.
     if (!serverBacked) return;
     fetch('/api/state', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-admin-password': appSettings.adminPassword || '' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-password': appSettings.adminPassword || '',
+        // Only set once this session has loaded the real records via
+        // /api/admin/state. Without it the server keeps its own members and
+        // bookings rather than trusting this payload's copy.
+        ...(hasFullState ? { 'x-full-state': '1' } : {}),
+      },
       body: JSON.stringify(appSettings)
     }).catch(err => console.warn('Could not sync to server (offline?):', err));
   }
@@ -5875,6 +5895,28 @@ let currentReviewBarber = '';
       window.speechSynthesis.cancel();
     }
     hideSpeakHint();
+  }
+
+  // iOS Safari (and Chrome's autoplay policy) will only start speech if the
+  // FIRST speechSynthesis.speak() of the page session happens synchronously
+  // inside a real user gesture. Our replies are spoken after an await and a
+  // typing delay, so by then the gesture is long gone and every utterance is
+  // dropped silently — no audio, no onstart, no onerror. That is why voice
+  // appeared broken on iPhone regardless of which assistant produced the
+  // reply. Speaking one silent utterance from inside the tap unlocks the
+  // engine for the rest of the session.
+  let speechUnlocked = false;
+  function primeSpeechSynthesis() {
+    if (speechUnlocked || !('speechSynthesis' in window)) return;
+    try {
+      const warmup = new SpeechSynthesisUtterance(' ');
+      warmup.volume = 0;
+      window.speechSynthesis.speak(warmup);
+      speechUnlocked = true;
+    } catch (e) {
+      // Never let a warm-up failure block sending the message.
+      speechUnlocked = true;
+    }
   }
 
   function speakText(text, onDone) {
@@ -7304,11 +7346,11 @@ let currentReviewBarber = '';
         if (fresh.members) {
           paidMembers = fresh.members;
           appSettings.members = paidMembers;
-          localStorage.setItem('primus_paid_members', JSON.stringify(paidMembers));
+          // Deliberately not cached — see the note at the members bootstrap.
         }
       } catch (e) { /* offline — fall back to whatever's cached locally below */ }
     } else {
-      try { paidMembers = JSON.parse(localStorage.getItem('primus_paid_members') || '{}'); appSettings.members = paidMembers; } catch (e) { /* ignore */ }
+      /* no local member cache to fall back on — see the note above */
     }
 
     const data = paidMembers[memNum];
@@ -7348,7 +7390,7 @@ let currentReviewBarber = '';
     membershipInput.value = memNum;
     // Refresh local membership cache from the server so `active: true` is reflected immediately.
     fetch('/api/state').then(r => r.json()).then(fresh => {
-      if (fresh.members) { paidMembers = fresh.members; appSettings.members = paidMembers; localStorage.setItem('primus_paid_members', JSON.stringify(paidMembers)); }
+      if (fresh.members) { paidMembers = fresh.members; appSettings.members = paidMembers; }
       handleMembershipInput();
     }).catch(() => handleMembershipInput());
   }
@@ -10583,7 +10625,10 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
           const fullState = await resp.json();
           appSettings = Object.assign({}, defaultAppSettings, fullState);
           if (!appSettings.merchant) appSettings.merchant = JSON.parse(JSON.stringify(defaultAppSettings.merchant));
-          paidMembers = appSettings.members;
+          paidMembers = appSettings.members || {};
+          // This response is the unprojected state, so saves from here may
+          // legitimately carry members/bookings back to the server.
+          hasFullState = true;
           localStorage.setItem('primus_admin_settings', JSON.stringify(appSettings));
           closeAdminPasswordModal();
           showAdminHeaderBadge();
@@ -11097,8 +11142,78 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     return `${appSettings.currency}${Number(amount).toLocaleString()}`;
   }
 
+  // ---------- Matching helpers (no API, no network) ----------
+  // The old matcher was a bare `lower.includes(w)`, which misfires badly:
+  // 'hi' matched inside "this"/"which"/"shipping", 'open' inside "reopen",
+  // and any typo at all ("haircutt", "apointment") fell straight through to
+  // the generic fallback. These three helpers fix both problems for every
+  // intent at once, since all 17 of them route through matchesAny().
+
+  // Strips punctuation and pads with spaces so ' word ' boundary tests work.
+  function normalizeMsg(str) {
+    return ' ' + String(str || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim() + ' ';
+  }
+
+  // Standard edit distance, bailing out early once it exceeds `max` — we only
+  // ever care about "off by one", so there's no need to fill the whole matrix.
+  function editDistance(a, b, max) {
+    if (Math.abs(a.length - b.length) > max) return max + 1;
+    let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
+    for (let i = 1; i <= a.length; i++) {
+      const cur = [i];
+      let best = i;
+      for (let j = 1; j <= b.length; j++) {
+        cur[j] = Math.min(
+          prev[j] + 1,
+          cur[j - 1] + 1,
+          prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+        );
+        if (cur[j] < best) best = cur[j];
+      }
+      if (best > max) return max + 1;
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+
+  // Deliberately conservative: both words at least 5 characters, same first
+  // letter, one edit apart. Without those guards 'your' fuzzy-matches 'hour'
+  // and "what's your name" would get answered with the opening times.
+  function fuzzyWordMatch(token, target) {
+    if (token.length < 5 || target.length < 5) return false;
+    if (token[0] !== target[0]) return false;
+    return editDistance(token, target, 1) <= 1;
+  }
+
+  // Crude singular form. Whole-word matching would otherwise regress on the
+  // commonest phrasings there are — "what are your hours" no longer matching
+  // the keyword 'hour', "prices" missing 'price' — which plain substring
+  // matching got right by accident.
+  function stemWord(w) {
+    // '-es' only drops two letters after a sibilant (boxes -> box,
+    // watches -> watch). Applying it blindly turns 'prices' into 'pric'.
+    if (w.length > 4 && /(s|x|z|ch|sh)es$/.test(w)) return w.slice(0, -2);
+    if (w.length > 3 && w.endsWith('s') && !w.endsWith('ss')) return w.slice(0, -1);
+    return w;
+  }
+
   function matchesAny(lower, words) {
-    return words.some(w => lower.includes(w));
+    const norm = normalizeMsg(lower);
+    const tokens = norm.trim().split(' ').filter(Boolean);
+    const stems = tokens.map(stemWord);
+    return words.some(w => {
+      const phrase = normalizeMsg(w).trim();
+      if (!phrase) return false;
+      // Multi-word phrases must appear intact — fuzzing those invites nonsense.
+      if (phrase.includes(' ')) return norm.includes(' ' + phrase + ' ');
+      if (norm.includes(' ' + phrase + ' ')) return true;
+      const target = stemWord(phrase);
+      return stems.some(t => t === target || fuzzyWordMatch(t, target));
+    });
   }
 
   function findMentionedService(lower) {
@@ -11143,19 +11258,28 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
   // of being written into that modal's DOM. Never reveals *whether* a contact
   // matches without also checking it's active — same "no partial info" rule
   // as the modal.
-  function resolveMembershipLookupReply(contactRaw) {
-    const contactVal = contactRaw.trim().toLowerCase();
-    const inputDigits = contactVal.replace(/\D/g, '').slice(-10);
-    let matchMemNum = null;
-    for (const [memNum, data] of Object.entries(paidMembers || {})) {
-      const emailMatch = data.email && data.email.toLowerCase() === contactVal;
-      const phoneMatch = data.phone && inputDigits.length >= 7 && (data.phone.replace(/\D/g, '').slice(-10) === inputDigits);
-      if (emailMatch || phoneMatch) { matchMemNum = memNum; break; }
+  // Asks the server to match the contact detail and return only this one
+  // person's membership number. This used to loop over a client-side copy of
+  // every member — which meant the "for your privacy, I'll verify you first"
+  // step was checking a list the visitor had already downloaded. The browser
+  // now never sees anyone's records, so the verification is real.
+  async function resolveMembershipLookupReply(contactRaw) {
+    const contactVal = contactRaw.trim();
+    const notFound = `I couldn't find an active membership under that phone number or email. If you think that's a mistake, our team can check manually:${contactActionButtons()}`;
+    if (!contactVal || appSettings.membershipActive === false) return notFound;
+    try {
+      const resp = await fetch('/api/members/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contact: contactVal })
+      });
+      if (!resp.ok) throw new Error('lookup failed');
+      const data = await resp.json();
+      if (!data.found) return notFound;
+      return `Found it! Your membership ID is <strong>${escapeAttr(data.membershipNumber)}</strong>. You can use that at checkout for your ${appSettings.discountRate}% discount.`;
+    } catch (e) {
+      return `I couldn't check that just now. Our team can look it up for you:${contactActionButtons()}`;
     }
-    if (matchMemNum && paidMembers[matchMemNum].active !== false && appSettings.membershipActive !== false) {
-      return `Found it! Your membership ID is <strong>${matchMemNum}</strong>. You can use that at checkout for your ${appSettings.discountRate}% discount.`;
-    }
-    return `I couldn't find an active membership under that phone number or email. If you think that's a mistake, our team can check manually:${contactActionButtons()}`;
   }
 
   // Looks up a customer's upcoming appointment(s) by the membership ID or
@@ -11163,32 +11287,36 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
   // submitBooking() (see its appSettings.bookings.push call) — every
   // booking made through either the full scheduler or the chat wizard is
   // searchable here, since both funnel through the same submitBooking().
-  function resolveAppointmentLookupReply(contactRaw) {
+  // Same shape as the membership lookup above: the server matches and returns
+  // only this customer's own upcoming bookings. The public /api/state now
+  // carries bookings stripped to { date, time, barber } for slot availability,
+  // so no customer's name, email or confirmation number is in the browser.
+  async function resolveAppointmentLookupReply(contactRaw) {
     const contactVal = contactRaw.trim();
-    const contactLower = contactVal.toLowerCase();
-    if (!contactLower) {
+    if (!contactVal) {
       return `I didn't catch that — what's the membership ID or email you booked with?`;
     }
+    const none = `I couldn't find any upcoming appointments under that. If you think that's a mistake, our team can check manually:${contactActionButtons()}`;
+    try {
+      const resp = await fetch('/api/bookings/lookup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reference: contactVal })
+      });
+      if (!resp.ok) throw new Error('lookup failed');
+      const { bookings = [] } = await resp.json();
+      if (!bookings.length) return none;
 
-    const todayStr = getLocalDateString();
-    let matches = (appSettings.bookings || []).filter(bk => {
-      const emailMatch = bk.custEmail && bk.custEmail.toLowerCase() === contactLower;
-      const memMatch = bk.membership && bk.membership.toLowerCase() === contactLower;
-      return (emailMatch || memMatch) && bk.date >= todayStr; // only upcoming — past visits aren't useful here
-    });
-    matches.sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
+      const list = bookings.map(bk =>
+        `\u2022 <strong>${escapeAttr(bk.service || 'Appointment')}</strong> with ${escapeAttr(bk.barber)} on ${escapeAttr(bk.date)} at ${escapeAttr(bk.time)}${bk.appointmentNumber ? ` (Confirmation #${escapeAttr(bk.appointmentNumber)})` : ''}`
+      ).join('<br>');
 
-    if (!matches.length) {
-      return `I couldn't find any upcoming appointments under that. If you think that's a mistake, our team can check manually:${contactActionButtons()}`;
+      return bookings.length === 1
+        ? `Found it! Here's your upcoming appointment:<br>${list}`
+        : `Found ${bookings.length} upcoming appointments:<br>${list}`;
+    } catch (e) {
+      return `I couldn't check that just now. Our team can look it up for you:${contactActionButtons()}`;
     }
-
-    const list = matches.map(bk =>
-      `• <strong>${bk.service || 'Appointment'}</strong> with ${bk.barber} on ${bk.date} at ${bk.time} (Confirmation #${bk.appointmentNumber})`
-    ).join('<br>');
-
-    return matches.length === 1
-      ? `Found it! Here's your upcoming appointment:<br>${list}`
-      : `Found ${matches.length} upcoming appointments:<br>${list}`;
   }
 
   // Finds a paidMembers record by membership ID, ignoring case — membership
@@ -11372,7 +11500,45 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       return `${appSettings.businessName} is run by ${appSettings.ownerName}.`;
     }
 
-    // 17) Fallback — still warm and helpful, and nudges toward what we can answer.
+    // 17) Payment methods — answered from the merchant settings the owner
+    // already filled in, so this stays correct without anyone maintaining a
+    // second copy of the list.
+    if (matchesAny(lower, ['pay', 'payment', 'gcash', 'maya', 'paypal', 'gotyme', 'maribank',
+                           'cash', 'card', 'bank transfer', 'how do i pay', 'accept'])) {
+      const m = appSettings.merchant || {};
+      const wallets = [['GCash', m.gcash], ['Maya', m.maya], ['GoTyme', m.gotyme],
+                       ['Maribank', m.maribank], ['PayPal', m.paypal]]
+        .filter(([, v]) => v && (v.number || v.qrImage))
+        .map(([label]) => label);
+      if (m.paymongoEnabled || m.xenditEnabled) wallets.push('card');
+      if (!wallets.length) {
+        return `You can settle up in person at the shop — tap below if you'd like to check with the team first:${contactActionButtons()}`;
+      }
+      return `We accept ${wallets.join(', ')}, plus cash in store. You'll see the full list with QR codes at checkout.`;
+    }
+
+    // 18) Walk-ins vs appointments.
+    if (matchesAny(lower, ['walk in', 'walkin', 'walk ins', 'without an appointment',
+                           'do i need an appointment', 'need a booking', 'just show up', 'drop in'])) {
+      const today = todaysHoursLine();
+      return `Walk-ins are welcome when a chair is free, but booking ahead guarantees your slot and your preferred barber.${today ? ` ${today}` : ''} Say "book" and I'll set one up now.`;
+    }
+
+    // 19) Cancel / reschedule. There's no self-service path for this, so say
+    // so plainly and hand them to a person rather than pretending otherwise.
+    if (matchesAny(lower, ['cancel', 'reschedule', 'move my appointment', 'change my booking',
+                           'change my appointment', 'postpone'])) {
+      return `I can't change an existing booking from here yet — the team can sort it out in a moment though:${contactActionButtons()}`;
+    }
+
+    // 20) Location / directions. No address field exists in settings, so this
+    // routes to a human instead of inventing one.
+    if (matchesAny(lower, ['where are you', 'location', 'address', 'directions', 'how do i get there',
+                           'where is the shop', 'map', 'parking'])) {
+      return `Give us a call or drop us an email and we'll point you straight to us:${contactActionButtons()}`;
+    }
+
+    // 21) Fallback — still warm and helpful, and nudges toward what we can answer.
     return pickRandom([
       `I want to make sure I get that right for you — could you tell me a bit more? I can help with services, pricing, hours, booking, or membership.`,
       `Good question! I don't have that specific detail, but I can help with our services, prices, hours, booking, or membership — or say "human" and I'll connect you with our team.`,
@@ -11462,6 +11628,10 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     const msgText = input.value.trim();
     if (!msgText) return;
 
+    // Still inside the user's tap/Enter keypress here — the only moment the
+    // browser will let us unlock audio. Must stay ahead of any await.
+    primeSpeechSynthesis();
+
     setChatWidgetActive(true);
 
     const chatMessages = document.getElementById('chatMessages');
@@ -11488,10 +11658,10 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       if (chatFlow.intent === 'membership_lookup') {
         // The customer's *next* message after being asked is treated as
         // their verification contact, not a fresh question.
-        replyHtml = resolveMembershipLookupReply(msgText);
+        replyHtml = await resolveMembershipLookupReply(msgText);
         chatFlow.intent = null;
       } else if (chatFlow.intent === 'appointment_lookup') {
-        replyHtml = resolveAppointmentLookupReply(msgText);
+        replyHtml = await resolveAppointmentLookupReply(msgText);
         chatFlow.intent = null;
       } else if (chatFlow.intent === 'renewal_id') {
         // First half of the renewal hand-off: remember the ID they gave,

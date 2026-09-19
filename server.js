@@ -88,6 +88,7 @@ const path = require('path');
 const crypto = require('crypto');
 const mailer = require('./mailer'); // Resend-backed transactional email (see mailer.js)
 const supabaseAdmin = require('./supabaseAdmin'); // Supabase Auth for staff accounts (see supabaseAdmin.js)
+const stateStore = require('./stateStore');       // durable state storage (see stateStore.js)
 
 const app = express();
 // Render sits behind exactly one proxy. `true` would trust the whole
@@ -153,30 +154,32 @@ const OWNER_EMAILS = (process.env.OWNER_EMAILS || '')
 // Storage
 // ---------------------------------------------------------------------------
 
+// Used only when there's nothing stored yet. Everything else (services,
+// hours, gallery, etc.) is filled in by index.html's own client-side defaults
+// via Object.assign, the first time nothing comes back from the server.
+function seedState() {
+  return {
+    // No adminPassword seeded here on purpose — auth reads ADMIN_PASSWORD
+    // from the environment. A seeded default would silently reappear every
+    // time storage is recreated.
+    members: {},
+    bookings: [],
+    merchant: { paymongoEnabled: false, xenditEnabled: false },
+    _payments: {}, // internal: paymongo ref -> { status, membershipNumber, checkoutSessionId, name, email, phone }
+  };
+}
+
+// Both of these stay synchronous on purpose — they're called from inside 30+
+// request handlers. stateStore keeps the state in memory (loaded from
+// Supabase before the server starts listening) and persists writes in the
+// background, so the call sites below are unchanged while the data itself
+// now survives a redeploy. See stateStore.js for the full reasoning.
 function readState() {
-  try {
-    const raw = fs.readFileSync(STATE_FILE, 'utf8');
-    return JSON.parse(raw);
-  } catch (e) {
-    // First run, or file missing/corrupt — start from a minimal seed.
-    // Everything else (services, hours, gallery, etc.) is filled in by
-    // index.html's own client-side defaults via Object.assign, the first
-    // time nothing comes back from the server for those fields.
-    return {
-      // No adminPassword seeded here on purpose — auth reads ADMIN_PASSWORD
-      // from the environment. A seeded default would silently reappear every
-      // time this file is recreated (which, on an ephemeral disk, is often).
-      members: {},
-      bookings: [],
-      merchant: { paymongoEnabled: false, xenditEnabled: false },
-      _payments: {}, // internal: paymongo ref -> { status, membershipNumber, checkoutSessionId, name, email, phone }
-    };
-  }
+  return stateStore.read();
 }
 
 function writeState(state) {
-  fs.mkdirSync(path.dirname(STATE_FILE), { recursive: true });
-  fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  stateStore.write(state);
 }
 
 // ---------------------------------------------------------------------------
@@ -201,11 +204,14 @@ function secretsMatch(a, b) {
 }
 
 async function requireAdmin(req, res, state) {
+  // Both are accepted, rather than one shadowing the other. ADMIN_PASSWORD is
+  // the break-glass credential and must always work — it's the only one that
+  // survives the state file being recreated. state.adminPassword is whatever
+  // the owner set in the console's Security page, and keeps working too.
   const provided = req.get('x-admin-password') || '';
-  // state.adminPassword is honoured if an owner set one through the console,
-  // otherwise the environment value. Never a hardcoded literal.
-  const actual = state.adminPassword || ADMIN_PASSWORD;
-  if (actual && secretsMatch(provided, actual)) return true;
+  if (provided && (secretsMatch(provided, ADMIN_PASSWORD) || secretsMatch(provided, state.adminPassword))) {
+    return true;
+  }
 
   if (OWNER_EMAILS.length && supabaseAdmin.isConfigured()) {
     const authHeader = req.get('authorization') || '';
@@ -426,11 +432,39 @@ function verifyPaymongoWebhookSignature(rawBody, signatureHeader, secret) {
 // State routes
 // ---------------------------------------------------------------------------
 
-app.get('/api/state', (req, res) => {
-  const state = readState();
+// The public payload deliberately carries NO customer personal data. It used
+// to ship the whole `members` object — name, email, phone, payment method and
+// reference number for every paying customer — plus every booking record, to
+// anyone who opened this URL unauthenticated. Two projections replace them:
+//
+//   memberStatuses  { "MEM-12345": { active: true } }
+//   bookings        [ { date, time, barber } ]
+//
+// which is precisely what the customer page needs (validating a membership
+// number at checkout, and greying out slots that are already taken) and
+// nothing more. Anything that genuinely needs a person's details now goes
+// through the lookup routes below, which return only the one matching record.
+// Admins still get the unprojected state from GET /api/admin/state.
+function buildPublicState(state) {
   const publicState = { ...state };
   delete publicState.adminPassword;
   delete publicState._payments;
+
+  publicState.memberStatuses = Object.fromEntries(
+    Object.entries(state.members || {}).map(([num, m]) => [num, { active: m.active !== false }])
+  );
+  delete publicState.members;
+
+  publicState.bookings = (state.bookings || []).map(b => ({
+    date: b.date, time: b.time, barber: b.barber,
+  }));
+
+  return publicState;
+}
+
+app.get('/api/state', (req, res) => {
+  const state = readState();
+  const publicState = buildPublicState(state);
   publicState.paymongoAvailable = !!PAYMONGO_SECRET_KEY;
   publicState.xenditAvailable = !!XENDIT_SECRET_KEY;
   publicState.aiChatAvailable = !!(ANTHROPIC_API_KEY || OPENAI_API_KEY || GEMINI_API_KEY);
@@ -438,10 +472,93 @@ app.get('/api/state', (req, res) => {
   res.json(publicState);
 });
 
+// ---------------------------------------------------------------------------
+// Customer lookup routes
+//
+// These exist so the browser never needs a copy of everyone's records to
+// answer a question about one person. Each takes a contact detail the real
+// customer would know, matches it server-side, and returns only their own
+// row. Rate-limited, because a lookup endpoint that accepts an email is an
+// enumeration tool if you let it run unbounded.
+// ---------------------------------------------------------------------------
+
+const lookupLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 15 });
+
+function normalizeDigits(value) {
+  return String(value || '').replace(/\D/g, '').slice(-10);
+}
+
+// Membership number -> is it usable, and what name is on it. The name is
+// returned only on a positive match (it pre-fills the review form); an
+// unknown number gets no data at all.
+app.post('/api/members/verify', lookupLimiter, (req, res) => {
+  const num = String(req.body?.membershipNumber || '').trim();
+  if (!num) return res.status(400).json({ error: 'Membership number required.' });
+  const state = readState();
+  const entry = Object.entries(state.members || {})
+    .find(([memNum]) => memNum.toLowerCase() === num.toLowerCase());
+  if (!entry || entry[1].active === false) return res.json({ valid: false });
+  return res.json({ valid: true, membershipNumber: entry[0], name: entry[1].name || '' });
+});
+
+// Phone or email -> that person's membership number. Used by the chat
+// assistant, which previously scanned a client-side copy of every member.
+app.post('/api/members/lookup', lookupLimiter, (req, res) => {
+  const contact = String(req.body?.contact || '').trim().toLowerCase();
+  if (!contact) return res.status(400).json({ error: 'Contact required.' });
+  const digits = normalizeDigits(contact);
+  const state = readState();
+  for (const [memNum, data] of Object.entries(state.members || {})) {
+    const emailMatch = data.email && data.email.toLowerCase() === contact;
+    const phoneMatch = data.phone && digits.length >= 7 && normalizeDigits(data.phone) === digits;
+    if ((emailMatch || phoneMatch) && data.active !== false) {
+      return res.json({ found: true, membershipNumber: memNum });
+    }
+  }
+  return res.json({ found: false });
+});
+
+// Membership number or email -> that person's upcoming bookings only.
+app.post('/api/bookings/lookup', lookupLimiter, (req, res) => {
+  const ref = String(req.body?.reference || '').trim().toLowerCase();
+  if (!ref) return res.status(400).json({ error: 'Reference required.' });
+  const state = readState();
+  const today = new Date().toISOString().slice(0, 10);
+  const matches = (state.bookings || []).filter(b => {
+    const byMembership = b.membership && String(b.membership).toLowerCase() === ref;
+    // Booking records store the customer address as custEmail; `email` is
+    // accepted too so this keeps working if that ever gets normalised.
+    const byEmail = (b.custEmail && String(b.custEmail).toLowerCase() === ref)
+      || (b.email && String(b.email).toLowerCase() === ref);
+    return (byMembership || byEmail) && (!b.date || b.date >= today);
+  }).map(b => ({
+    date: b.date, time: b.time, barber: b.barber,
+    service: b.service, appointmentNumber: b.appointmentNumber,
+  }));
+  matches.sort((a, b) => String(a.date + a.time).localeCompare(String(b.date + b.time)));
+  res.json({ bookings: matches });
+});
+
 app.post('/api/state', adminLimiter, async (req, res) => {
   const state = readState();
   if (!(await requireAdmin(req, res, state))) return;
   const incoming = req.body || {};
+
+  // A page that loaded from the PUBLIC /api/state holds projections, not the
+  // real records: memberStatuses instead of members, and bookings stripped
+  // down to { date, time, barber }. If such a page ever POSTs its whole
+  // settings blob back, those projections would overwrite the genuine data
+  // and silently destroy every customer's contact details and booking
+  // history. Only a client that fetched GET /api/admin/state has the real
+  // thing, and it says so with this header; everyone else's copy of these
+  // two keys is discarded in favour of what the server already holds.
+  const hasFullState = req.get('x-full-state') === '1';
+  if (!hasFullState) {
+    delete incoming.members;
+    delete incoming.bookings;
+  }
+  delete incoming.memberStatuses; // never persisted — derived on read
+
   // Preserve internal bookkeeping that the client doesn't know about.
   const merged = { ...state, ...incoming, _payments: state._payments || {} };
 
@@ -1251,14 +1368,26 @@ app.use(express.static(__dirname, { extensions: ['html'] }));
 app.get('/owner', (req, res) => res.sendFile(path.join(__dirname, 'owner.html')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
 
-app.listen(PORT, () => {
-  console.log(`Primus Barbershop server listening on port ${PORT}`);
-  console.log(`  PayMongo:  ${PAYMONGO_SECRET_KEY ? 'configured' : 'not configured'}`);
-  console.log(`  PayMongo webhook secret: ${PAYMONGO_WEBHOOK_SECRET ? 'configured' : 'not configured (payments still work via /status polling)'}`);
-  console.log(`  Xendit:    ${XENDIT_SECRET_KEY ? 'configured' : 'not configured'}`);
-  console.log(`  Xendit webhook token: ${XENDIT_WEBHOOK_TOKEN ? 'configured' : 'not configured (payments still work via /status polling)'}`);
-  console.log(`  AI chat:   ${(ANTHROPIC_API_KEY || OPENAI_API_KEY || GEMINI_API_KEY) ? 'configured' : 'not configured'}`);
-  console.log(`  Resend email: ${(process.env.RESEND_API_KEY && process.env.FROM_EMAIL) ? 'configured' : 'not configured — receipts/cards will be skipped and logged'}`);
-  console.log(`  Turnstile: ${TURNSTILE_SECRET_KEY ? 'configured' : 'not configured — payment forms are unprotected against bots'}`);
-  console.log(`  Allowed origin: ${ALLOWED_ORIGIN || 'not set — cross-site POSTs are not blocked'}`);
+// The state has to be in memory before the first request arrives, because
+// readState() is synchronous. Nothing listens until the load resolves.
+stateStore.installShutdownHandlers();
+
+stateStore.init(seedState()).then((storage) => {
+  app.listen(PORT, () => {
+    console.log(`Primus Barbershop server listening on port ${PORT}`);
+    console.log(`  PayMongo:  ${PAYMONGO_SECRET_KEY ? 'configured' : 'not configured'}`);
+    console.log(`  PayMongo webhook secret: ${PAYMONGO_WEBHOOK_SECRET ? 'configured' : 'not configured (payments still work via /status polling)'}`);
+    console.log(`  Xendit:    ${XENDIT_SECRET_KEY ? 'configured' : 'not configured'}`);
+    console.log(`  Xendit webhook token: ${XENDIT_WEBHOOK_TOKEN ? 'configured' : 'not configured (payments still work via /status polling)'}`);
+    console.log(`  AI chat:   ${(ANTHROPIC_API_KEY || OPENAI_API_KEY || GEMINI_API_KEY) ? 'configured' : 'not configured'}`);
+    console.log(`  Resend email: ${(process.env.RESEND_API_KEY && process.env.FROM_EMAIL) ? 'configured' : 'not configured — receipts/cards will be skipped and logged'}`);
+    console.log(`  Turnstile: ${TURNSTILE_SECRET_KEY ? 'configured' : 'not configured — payment forms are unprotected against bots'}`);
+    console.log(`  Allowed origin: ${ALLOWED_ORIGIN || 'not set — cross-site POSTs are not blocked'}`);
+    console.log(`  State storage: ${storage.remote
+      ? 'Supabase (durable — survives redeploys)'
+      : 'LOCAL FILE ONLY — data is wiped on every deploy/restart on Render free'}`);
+    if (!storage.remote && storage.configured) {
+      console.log('  [state] Supabase is configured but unreachable — check the app_state table exists.');
+    }
+  });
 });
