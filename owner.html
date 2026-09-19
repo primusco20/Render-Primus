@@ -6,30 +6,73 @@
 <title>Owner Console</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@emailjs/browser@3/dist/email.min.js"></script>
 <!-- Owner login now talks to Supabase Auth directly — see ownerSupabaseClient below. -->
 <script type="text/javascript" src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
+  /* ---------------------------------------------------------------------
+     Liquid-glass tokens, lifted verbatim from index.html's dark theme so the
+     Owner Console reads as the same product as the customer site rather than
+     a separate tool. The old flat/brass palette is aliased onto these at the
+     bottom of this block, which is why none of the markup or JS below had to
+     change — every existing rule that referenced --panel, --line or --brass
+     now resolves to its glass equivalent.
+     --------------------------------------------------------------------- */
   :root {
-    --bg: #14161a;
-    --panel: #1c1f26;
-    --panel-raised: #22252d;
-    --line: #2a2e37;
-    --text: #ece9e2;
-    --text-sub: #8b909c;
-    --brass: #c08a3e;
-    --brass-light: #d9a25a;
-    --good: #4c9a6a;
-    --bad: #c0533e;
-    --radius: 10px;
+    --accent: #0071e3;
+    --accent-light: #42a5f5;
+    --accent-glow: rgba(0, 113, 227, 0.45);
+
+    --ios-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --ios-ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+    --ios-tap: cubic-bezier(0.25, 0.1, 0.25, 1);
+
+    --bg-main: #060608;
+    --text-main: #ffffff;
+    --text-muted: #e4e4eb;
+    --text-sub: #b4b4be;
+
+    --glass-bg: rgba(255, 255, 255, 0.11);
+    --glass-bg-hover: rgba(255, 255, 255, 0.18);
+    --glass-bg-strong: rgba(28, 28, 34, 0.78);
+    --glass-border: rgba(255, 255, 255, 0.22);
+    --glass-border-hover: rgba(255, 255, 255, 0.42);
+    --glass-shadow: 0 10px 34px rgba(0, 0, 0, 0.55), inset 0 1.5px 1.5px rgba(255, 255, 255, 0.32), inset 0 -14px 26px -16px rgba(255, 255, 255, 0.2);
+    --glass-shadow-hover: 0 18px 46px rgba(0, 0, 0, 0.6), inset 0 1.5px 1.5px rgba(255, 255, 255, 0.45), inset 0 -16px 30px -16px rgba(255, 255, 255, 0.3);
+    --glass-blur: blur(28px) saturate(190%);
+    --input-bg: rgba(255, 255, 255, 0.1);
+
+    /* Back-compat aliases — every pre-existing rule keeps working. */
+    --bg: var(--bg-main);
+    --panel: var(--glass-bg);
+    --panel-raised: var(--glass-bg-hover);
+    --line: var(--glass-border);
+    --text: var(--text-main);
+    --brass: var(--accent);
+    --brass-light: var(--accent-light);
+    --good: #10b981;
+    --bad: #ff453a;
+    --radius: 16px;
   }
   * { box-sizing: border-box; }
   html, body {
-    margin: 0; padding: 0; background: var(--bg); color: var(--text);
-    font-family: 'Inter', system-ui, sans-serif; font-size: 14px;
+    margin: 0; padding: 0; color: var(--text-main);
+    font-family: 'Manrope', system-ui, sans-serif; font-size: 14px;
     -webkit-font-smoothing: antialiased;
+    min-height: 100%;
+  }
+  /* Glass only reads as glass when there is something behind it to refract.
+     A flat fill would make every backdrop-filter in this file a no-op, so the
+     page sits on the same layered wash the customer site uses. */
+  body {
+    background:
+      radial-gradient(1100px 700px at 12% -8%, rgba(0, 113, 227, 0.16), transparent 62%),
+      radial-gradient(900px 600px at 92% 4%, rgba(66, 165, 245, 0.10), transparent 58%),
+      radial-gradient(800px 800px at 50% 112%, rgba(0, 113, 227, 0.08), transparent 60%),
+      var(--bg-main);
+    background-attachment: fixed;
   }
   h1, h2, h3, .display { font-family: 'Fraunces', serif; font-weight: 500; letter-spacing: 0.01em; }
   button { font-family: inherit; }
@@ -229,6 +272,175 @@
     .sidebar-foot { margin-top: 0; padding-top: 0; border-top: none; margin-left: 8px; }
     .main { padding: 22px 18px; height: auto; }
   }
+
+  /* =====================================================================
+     Liquid-glass component layer
+     ---------------------------------------------------------------------
+     Appended last so it overrides the original flat rules without editing
+     them — markup, ids and JS are untouched. Panels get the same blur,
+     specular border and spring-hover the admin dock had in index.html.
+     ===================================================================== */
+
+  .sidebar {
+    background: var(--glass-bg);
+    border-right: 1px solid var(--glass-border);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+  .sidebar .brand-name { font-family: 'Fraunces', serif; letter-spacing: 0.01em; }
+  .sidebar .brand .dot {
+    background: var(--accent);
+    box-shadow: 0 0 10px var(--accent-glow);
+  }
+
+  /* Mirrors .admin-tab-btn — same easing, same 4px nudge, same scale. */
+  .nav-item {
+    border: 1px solid transparent;
+    border-radius: 10px;
+    font-weight: 700;
+    font-size: 0.78rem;
+    transform: translateX(0) scale(1);
+    transition: background-color 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                color 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.28s cubic-bezier(0.4, 0, 0.2, 1),
+                transform 0.5s var(--ios-spring);
+  }
+  .nav-item:hover {
+    background: var(--glass-bg-hover);
+    color: var(--text-main);
+    border-color: var(--glass-border-hover);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow-hover);
+    transform: translateX(4px) scale(1.035);
+  }
+  .nav-item:active { transform: translateX(4px) scale(0.96); transition: transform 0.15s var(--ios-tap); }
+  .nav-item.active {
+    background: var(--accent); color: #fff; border-color: transparent;
+    box-shadow: 0 6px 18px var(--accent-glow);
+  }
+  .nav-item.active:hover { transform: translateX(0) scale(1); background: var(--accent); }
+
+  /* Surfaces */
+  .stat, .settings-block, .login-card, .subsection, .face-frame, .toast, .gallery-row {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+    box-shadow: var(--glass-shadow);
+  }
+  .login-card { border-radius: 22px; background: var(--glass-bg-strong); }
+  .toast { background: var(--glass-bg-strong); border-radius: 14px; }
+
+  .stat {
+    transition: transform 0.5s var(--ios-spring), box-shadow 0.28s ease, border-color 0.28s ease;
+  }
+  .stat:hover {
+    transform: translateY(-3px) scale(1.015);
+    border-color: var(--glass-border-hover);
+    box-shadow: var(--glass-shadow-hover);
+  }
+  .stat .num { font-family: 'Fraunces', serif; letter-spacing: -0.01em; }
+
+  /* Inputs */
+  .field input, .field select, .field textarea, input[type="text"], input[type="tel"],
+  input[type="email"], input[type="password"], input[type="number"], select, textarea {
+    background: var(--input-bg);
+    border: 1px solid var(--glass-border);
+    color: var(--text-main);
+    border-radius: 10px;
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+  }
+  .field input:focus, .field select:focus, .field textarea:focus,
+  input:focus, select:focus, textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--glass-bg-hover);
+    box-shadow: 0 0 0 3px var(--accent-glow);
+  }
+  .field label { color: var(--text-sub); font-weight: 600; letter-spacing: 0.01em; }
+
+  /* Buttons */
+  .btn, .small-btn, .subtab-btn, .btn-outline {
+    border-radius: 999px;
+    font-weight: 700;
+    border: 1px solid var(--glass-border);
+    transition: transform 0.4s var(--ios-spring), background-color 0.25s ease,
+                border-color 0.25s ease, box-shadow 0.25s ease, color 0.25s ease;
+  }
+  .btn {
+    background: var(--accent); color: #fff; border-color: transparent;
+    box-shadow: 0 6px 18px var(--accent-glow);
+  }
+  .btn:hover { transform: translateY(-2px) scale(1.02); box-shadow: 0 10px 26px var(--accent-glow); }
+  .btn:active { transform: scale(0.96); }
+  .btn-outline, .small-btn, .subtab-btn {
+    background: var(--glass-bg); color: var(--text-main);
+    -webkit-backdrop-filter: var(--glass-blur);
+    backdrop-filter: var(--glass-blur);
+  }
+  .btn-outline:hover, .small-btn:hover, .subtab-btn:hover {
+    background: var(--glass-bg-hover); border-color: var(--glass-border-hover);
+    transform: translateY(-1px) scale(1.02); box-shadow: var(--glass-shadow);
+  }
+  .small-btn:active, .subtab-btn:active, .btn-outline:active { transform: scale(0.96); }
+  .subtab-btn.active { background: var(--accent); color: #fff; border-color: transparent; }
+  .btn-danger, .small-btn.danger { background: var(--bad); color: #fff; border-color: transparent; }
+  .small-btn.danger:hover { background: #ff6961; }
+
+  /* Ledger rows + pills */
+  .ledger { border-top: 1px solid var(--glass-border); }
+  .ledger-row {
+    border-bottom: 1px solid var(--glass-border);
+    border-radius: 10px;
+    transition: background-color 0.2s ease, transform 0.35s var(--ios-spring);
+  }
+  .ledger-row:hover { background: var(--glass-bg); transform: translateX(3px); }
+  .ledger-row .primary { color: var(--text-main); font-weight: 700; }
+  .ledger-row .secondary { color: var(--text-sub); }
+  .pill {
+    border-radius: 999px; border: 1px solid var(--glass-border);
+    background: var(--glass-bg); color: var(--text-sub);
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  }
+  .badge { background: var(--accent); color: #fff; border-radius: 999px; }
+
+  .page-head h1 { font-family: 'Fraunces', serif; letter-spacing: -0.01em; }
+  .page-head p { color: var(--text-sub); }
+  .section-title {
+    color: var(--text-sub); font-weight: 700; font-size: 0.7rem;
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .empty-note { color: var(--text-sub); }
+  .toggle-row { border-bottom: 1px solid var(--glass-border); }
+  .switch-track { border: 1px solid var(--glass-border); }
+
+  #loginScreen {
+    background:
+      radial-gradient(1200px 600px at 15% -10%, rgba(0, 113, 227, 0.18), transparent 60%),
+      radial-gradient(900px 600px at 85% 10%, rgba(66, 165, 245, 0.10), transparent 58%),
+      var(--bg-main);
+  }
+  a { color: var(--accent-light); }
+  ::selection { background: var(--accent); color: #fff; }
+
+  /* backdrop-filter is expensive on low-end phones; drop to solid panels
+     there rather than shipping a janky blur. */
+  @media (max-width: 720px) {
+    .sidebar, .stat, .settings-block, .subsection, .btn-outline, .small-btn, .subtab-btn {
+      -webkit-backdrop-filter: none; backdrop-filter: none;
+      background: rgba(28, 28, 34, 0.82);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .nav-item, .stat, .btn, .small-btn, .subtab-btn, .btn-outline, .ledger-row {
+      transition: none !important; transform: none !important;
+    }
+  }
 </style>
 </head>
 <body>
@@ -297,16 +509,40 @@
     <!-- OVERVIEW -->
     <div class="page" data-page="overview">
       <div class="page-head">
-        <h1>Overview</h1>
-        <p>A quick read on what needs your attention right now.</p>
+        <h1 id="overviewGreeting">Overview</h1>
+        <p id="overviewDateLine">A quick read on what needs your attention right now.</p>
       </div>
+
+      <!-- 1. TODAY — what's happening right now -->
+      <div class="section-title">Today</div>
+      <div class="stat-row">
+        <div class="stat"><div class="num" id="statTodayBookings">0</div><div class="lbl">Bookings today</div></div>
+        <div class="stat"><div class="num" id="statLive">0</div><div class="lbl">Agents live now</div></div>
+        <div class="stat"><div class="num" id="statNextUp">—</div><div class="lbl">Next appointment</div></div>
+        <div class="stat"><div class="num" id="statOnShift">0</div><div class="lbl">Team on shift</div></div>
+      </div>
+      <div class="section-title">Today's schedule</div>
+      <div class="ledger" id="overviewTodayList"></div>
+      <div class="section-title">Support agents</div>
+      <div class="ledger" id="overviewAgentsList"></div>
+
+      <!-- 2. MEMBERSHIP & REVENUE -->
+      <div class="section-title">Membership &amp; revenue</div>
+      <div class="stat-row">
+        <div class="stat"><div class="num" id="statActiveMembers">0</div><div class="lbl">Active members</div></div>
+        <div class="stat"><div class="num" id="statMrr">—</div><div class="lbl">Recurring / month</div></div>
+        <div class="stat"><div class="num" id="statNewMembers">0</div><div class="lbl">Joined this month</div></div>
+        <div class="stat"><div class="num" id="statExpiring">0</div><div class="lbl">Expiring in 7 days</div></div>
+      </div>
+
+      <!-- 3. NEEDS ACTION -->
+      <div class="section-title">Needs your attention</div>
       <div class="stat-row">
         <div class="stat"><div class="num" id="statPending">0</div><div class="lbl">Pending approvals</div></div>
-        <div class="stat"><div class="num" id="statLive">0</div><div class="lbl">Agents live now</div></div>
+        <div class="stat"><div class="num" id="statUnverified">0</div><div class="lbl">Payments to verify</div></div>
         <div class="stat"><div class="num" id="statTeam">0</div><div class="lbl">Team members</div></div>
         <div class="stat"><div class="num" id="statReviews">0</div><div class="lbl">Reviews on file</div></div>
       </div>
-      <div class="section-title">Needs approval</div>
       <div class="ledger" id="overviewApprovalsList"></div>
     </div>
 
@@ -1032,24 +1268,173 @@
     return acct.role === 'staff' ? acct.position : (acct.position || 'Barber');
   }
 
+  // ---------------------------------------------------------------------
+  // Owner dashboard
+  // ---------------------------------------------------------------------
+  // Everything here is derived from the state this console already loads via
+  // GET /api/admin/state — no extra requests, and nothing is invented: a
+  // figure the data can't support renders as an em dash rather than a zero,
+  // so an empty shop never looks like a failing one.
+  //
+  // Booking records are shaped by submitBooking() in index.html:
+  //   { barber, date, time, appointmentNumber, service, price,
+  //     custName, custPhone, custEmail, membership }
+  // Dates are stored as YYYY-MM-DD strings, so they compare lexically.
+
+  function localDateKey(d) {
+    // Deliberately not toISOString(), which converts to UTC and rolls the
+    // date over for anyone east of Greenwich — including PH (UTC+8), where
+    // every booking after 4pm would land on "tomorrow".
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  }
+
+  // "01:30 PM" -> 810. Returns null on anything unparseable so a malformed
+  // record sorts last instead of throwing.
+  function minutesFromLabel(label) {
+    const m = /^(\d{1,2}):(\d{2})\s*(AM|PM)$/i.exec(String(label || '').trim());
+    if (!m) return null;
+    let h = parseInt(m[1], 10) % 12;
+    if (/PM/i.test(m[3])) h += 12;
+    return h * 60 + parseInt(m[2], 10);
+  }
+
+  function money(amount) {
+    const cur = appSettings.currency || '₱';
+    return cur + Number(amount || 0).toLocaleString();
+  }
+
   function renderOverview() {
-    const pending = accounts().filter(a => a.approved === false);
+    const all = accounts();
     const now = Date.now();
-    const live = accounts().filter(a => a.role === 'staff' && a.position === 'Support' && a.isLive && a.liveHeartbeat && (now - a.liveHeartbeat) < LIVE_STALE_MS);
-    document.getElementById('statPending').textContent = pending.length;
-    document.getElementById('statLive').textContent = live.length;
-    document.getElementById('statTeam').textContent = accounts().length;
-    document.getElementById('statReviews').textContent = (appSettings.reviews || []).length;
+    const today = localDateKey(new Date());
+    const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+
+    // ---------- 1. Today ----------
+    const bookings = appSettings.bookings || [];
+    const todays = bookings
+      .filter(b => b.date === today)
+      .sort((a, b) => (minutesFromLabel(a.time) ?? 1e9) - (minutesFromLabel(b.time) ?? 1e9));
+
+    const live = all.filter(a =>
+      a.role === 'staff' && a.position === 'Support' && a.isLive &&
+      a.liveHeartbeat && (now - a.liveHeartbeat) < LIVE_STALE_MS);
+
+    const onShift = all.filter(a =>
+      a.approved !== false && a.active !== false && a.status === 'Active');
+
+    const upcoming = todays.find(b => {
+      const m = minutesFromLabel(b.time);
+      return m !== null && m >= nowMinutes;
+    });
+
+    setText('statTodayBookings', todays.length);
+    setText('statLive', live.length);
+    setText('statOnShift', onShift.length);
+    setText('statNextUp', upcoming ? upcoming.time : (todays.length ? 'Done' : '—'));
+
+    const todayList = document.getElementById('overviewTodayList');
+    if (todayList) {
+      todayList.innerHTML = todays.length
+        ? todays.map(b => {
+            const m = minutesFromLabel(b.time);
+            const past = m !== null && m < nowMinutes;
+            return `<div class="ledger-row"${past ? ' style="opacity:0.55;"' : ''}>
+              <div style="min-width:82px;"><div class="primary">${escapeHtml(b.time || '—')}</div></div>
+              <div>
+                <div class="primary">${escapeHtml(b.custName || 'Walk-in')}</div>
+                <div class="secondary">${escapeHtml(b.service || 'Appointment')} · ${escapeHtml(b.barber || 'Any barber')}${b.membership ? ' · member' : ''}</div>
+              </div>
+              <div class="row-spacer"></div>
+              ${b.price ? `<span class="pill">${escapeHtml(money(b.price))}</span>` : ''}
+              ${past ? '<span class="pill">done</span>' : ''}
+            </div>`;
+          }).join('')
+        : '<div class="empty-note">No bookings on the calendar for today.</div>';
+    }
+
+    const agentList = document.getElementById('overviewAgentsList');
+    if (agentList) {
+      const supportStaff = all.filter(a =>
+        a.role === 'staff' && a.position === 'Support' && a.approved !== false && a.active !== false);
+      agentList.innerHTML = supportStaff.length
+        ? supportStaff.map(a => {
+            const isLive = a.isLive && a.liveHeartbeat && (now - a.liveHeartbeat) < LIVE_STALE_MS;
+            return `<div class="ledger-row">
+              <div>
+                <div class="primary">${escapeHtml(a.name || '')}</div>
+                <div class="secondary">${escapeHtml(a.status || 'Active')}</div>
+              </div>
+              <div class="row-spacer"></div>
+              <span class="pill" style="${isLive ? 'color:var(--good); border-color:var(--good);' : ''}">${isLive ? 'live now' : 'offline'}</span>
+            </div>`;
+          }).join('')
+        : '<div class="empty-note">No approved support agents yet.</div>';
+    }
+
+    // ---------- 2. Membership & revenue ----------
+    const members = Object.values(appSettings.members || {});
+    const active = members.filter(m => m.active !== false);
+    const sub = Number(appSettings.subscriptionAmount || 0);
+    const monthPrefix = today.slice(0, 7);
+
+    setText('statActiveMembers', active.length);
+    // Only a real subscription price can produce a real recurring figure.
+    setText('statMrr', sub > 0 ? money(active.length * sub) : '—');
+    setText('statNewMembers', members.filter(m => (m.paidDate || '').slice(0, 7) === monthPrefix).length);
+
+    // Memberships run 30 days from paidDate (see membershipExpiryLine in
+    // index.html); flag the ones lapsing within a week.
+    const soon = new Date(); soon.setDate(soon.getDate() + 7);
+    const soonKey = localDateKey(soon);
+    setText('statExpiring', active.filter(m => {
+      if (!m.paidDate) return false;
+      const end = new Date(m.paidDate);
+      if (isNaN(end)) return false;
+      end.setDate(end.getDate() + 30);
+      const k = localDateKey(end);
+      return k >= today && k <= soonKey;
+    }).length);
+
+    // ---------- 3. Needs attention ----------
+    const pending = all.filter(a => a.approved === false);
+    setText('statPending', pending.length);
+    setText('statUnverified', members.filter(m => m.pendingVerification).length);
+    setText('statTeam', all.length);
+    setText('statReviews', (appSettings.reviews || []).length);
 
     const badge = document.getElementById('navApprovalsBadge');
-    if (pending.length) { badge.style.display = ''; badge.textContent = pending.length; } else { badge.style.display = 'none'; }
+    if (badge) {
+      if (pending.length) { badge.style.display = ''; badge.textContent = pending.length; }
+      else { badge.style.display = 'none'; }
+    }
 
     const list = document.getElementById('overviewApprovalsList');
-    if (!pending.length) {
-      list.innerHTML = '<div class="empty-note">Nothing waiting on you right now.</div>';
-      return;
+    if (list) {
+      list.innerHTML = pending.length
+        ? pending.slice(0, 5).map(a => approvalRowHtml(a)).join('')
+        : '<div class="empty-note">Nothing waiting on you right now.</div>';
     }
-    list.innerHTML = pending.slice(0, 5).map(a => approvalRowHtml(a)).join('');
+
+    renderOverviewHeading(todays.length, pending.length);
+  }
+
+  function setText(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
+  function renderOverviewHeading(todayCount, pendingCount) {
+    const h = new Date().getHours();
+    const part = h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+    const name = (appSettings.ownerName || '').trim().split(' ')[0];
+    setText('overviewGreeting', name ? `${part}, ${name}` : part);
+
+    const dateLine = new Date().toLocaleDateString(undefined,
+      { weekday: 'long', day: 'numeric', month: 'long' });
+    const bits = [todayCount === 1 ? '1 booking today' : `${todayCount} bookings today`];
+    if (pendingCount) bits.push(pendingCount === 1 ? '1 approval waiting' : `${pendingCount} approvals waiting`);
+    setText('overviewDateLine', `${dateLine} · ${bits.join(' · ')}`);
   }
 
   function approvalRowHtml(a) {
