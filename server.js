@@ -459,6 +459,42 @@ function buildPublicState(state) {
     date: b.date, time: b.time, barber: b.barber,
   }));
 
+  // Staff records are projected the same way. The full entries carry an
+  // email, phone, username and — worst of all — a faceDescriptor, the 128
+  // number biometric template the Face ID check compares against. None of
+  // that belongs in an unauthenticated response.
+  //
+  // Unapproved and deactivated accounts are filtered out entirely rather
+  // than sent with a flag, so a pending sign-up isn't publicly visible
+  // either. What survives is only what the customer page draws: the Meet
+  // the Team cards, and the call-routing lookup.
+  const LIVE_STALE_MS = 90000;
+  const now = Date.now();
+  publicState.barberAccounts = (state.barberAccounts || [])
+    .filter(a => a.approved !== false && a.active !== false)
+    .map(a => {
+      const pub = {
+        id: a.id,
+        name: a.name,
+        position: a.position,
+        role: a.role,
+        status: a.status,
+        bio: a.bio,
+        photo: a.photo,
+      };
+      // A support agent's peer id has to reach the customer's browser — that
+      // is how the call connects — but only while they're actually taking
+      // calls. Once the heartbeat goes stale it stops being published.
+      const live = a.role === 'staff' && a.position === 'Support' && a.isLive
+        && a.liveHeartbeat && (now - a.liveHeartbeat) < LIVE_STALE_MS;
+      if (live) {
+        pub.supportPeerId = a.supportPeerId;
+        pub.isLive = true;
+        pub.liveHeartbeat = a.liveHeartbeat;
+      }
+      return pub;
+    });
+
   return publicState;
 }
 
@@ -781,6 +817,63 @@ function validateStaffSelfEdit(body) {
   }
   return null;
 }
+
+// A staff member reading their OWN record. The public /api/state no longer
+// carries email, phone, username or faceDescriptor for anyone, so this is how
+// a logged-in staff member gets their own profile after signing in.
+app.get('/api/staff/me', requireStaffSelf, (req, res) => {
+  const state = readState();
+  const acct = (state.barberAccounts || []).find(a => a.id === req.staff.id);
+  if (!acct) {
+    // Supabase authenticated them but no profile exists — the orphaned-login
+    // case that used to happen every time the state file was wiped.
+    return res.status(404).json({ error: 'No staff profile is linked to this login. Ask an admin to re-create it.' });
+  }
+  res.json({ account: acct });
+});
+
+// Username + password sign-in.
+//
+// The login form asks for a username, but Supabase Auth only knows emails, so
+// the browser used to resolve one to the other by searching the public
+// barberAccounts list — which is exactly why every staff email was published.
+// Doing the exchange here keeps the username UX and reveals nothing: a wrong
+// password returns the same generic failure as an unknown username, so this
+// can't be used to discover who works here or what their address is.
+app.post('/api/staff/signin', checkOrigin, paymentLimiter, async (req, res) => {
+  if (!supabaseAdmin.isConfigured()) {
+    return res.status(503).json({ error: 'Staff accounts are not set up on this server yet — ask the shop owner to finish the Supabase setup.' });
+  }
+  const username = String(req.body?.username || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Enter your username and password.' });
+  }
+
+  const state = readState();
+  const acct = (state.barberAccounts || []).find(
+    a => (a.username || '').toLowerCase() === username || (a.email || '').toLowerCase() === username
+  );
+
+  // Deliberately identical wording whether the username exists or the
+  // password was wrong — anything else is a staff-directory oracle.
+  const generic = { error: 'Incorrect username or password.' };
+  if (!acct || !acct.email) return res.status(401).json(generic);
+
+  const session = await supabaseAdmin.signInStaff(acct.email, password);
+  if (!session) return res.status(401).json(generic);
+
+  // Approval is checked after the password, so an unapproved account can't be
+  // identified without knowing its password either.
+  if (acct.role === 'staff' && acct.position === 'Support' && acct.approved === false) {
+    return res.status(403).json({ error: 'Your Support account is awaiting admin approval. Please check back once it has been approved.' });
+  }
+  if (acct.active === false) {
+    return res.status(403).json({ error: 'This account has been deactivated. Please contact an admin.' });
+  }
+
+  res.json({ session, account: acct });
+});
 
 app.patch('/api/staff/me', requireStaffSelf, (req, res) => {
   const body = req.body || {};

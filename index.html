@@ -3454,7 +3454,7 @@
 
 <div id="viewport-wrapper">
   <header class="nav" id="top">
-    <div class="brand-group" onclick="promptAdminPassword()" title="Click to open Admin Settings">
+    <div class="brand-group">
       <div class="brand-mark" id="brandMark">P</div>
       <div class="brand" id="brandTitle">PRIMUS</div>
     </div>
@@ -3517,24 +3517,7 @@
         </div>
       </div>
 
-      <div class="admin-header-badge" id="adminHeaderBadge">
-        <span class="admin-header-badge-dot"></span>
-        <span class="admin-header-badge-label">Admin</span>
-        <button type="button" class="admin-header-badge-btn" title="Open Admin Panel" onclick="openAdminModal()"><svg viewBox="0 0 24 24" style="fill:none;" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> <span class="label-text">Panel</span></button>
-        <button type="button" class="admin-header-badge-btn is-lock" title="Lock Admin Session" onclick="lockAdminSession()"><svg viewBox="0 0 24 24" style="fill:none;" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></button>
-        <div class="color-picker-dropdown">
-          <button class="color-current-btn" id="colorCurrentBtn" title="Change Accent Color" aria-label="Change Accent Color" onclick="toggleColorMenu()"></button>
-          <div class="color-menu" id="colorMenu">
-            <div class="color-option" data-color="blue" onclick="setAccentColor('blue')" title="Sapphire Blue"></div>
-            <div class="color-option" data-color="emerald" onclick="setAccentColor('emerald')" title="Emerald Green"></div>
-            <div class="color-option" data-color="amethyst" onclick="setAccentColor('amethyst')" title="Amethyst Purple"></div>
-            <div class="color-option" data-color="sunset" onclick="setAccentColor('sunset')" title="Sunset Coral"></div>
-            <div class="color-option" data-color="yellow" onclick="setAccentColor('yellow')" title="Amber Yellow"></div>
-            <div class="color-option" data-color="obsidian" onclick="setAccentColor('obsidian')" title="Obsidian Monochrome"></div>
-            <div class="color-option" data-color="clear" onclick="setAccentColor('clear')" title="Clear Liquid Glass"></div>
-          </div>
-        </div>
-      </div>
+      <!-- admin header badge (incl. accent-colour picker): moved to owner.html -->
 
 
       <button class="mobile-nav-toggle" id="mobileNavToggle" title="Menu" aria-label="Open Menu" aria-expanded="false" onclick="toggleMobileNav()">
@@ -4072,28 +4055,7 @@
   </div>
 </div>
 
-<div class="admin-modal-backdrop" id="adminPasswordBackdrop">
-  <div class="admin-modal" style="max-width: 380px;">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <h3 style="font-size: 1.2rem;">Owner Verification</h3>
-      <button class="btn-unified" style="background:transparent; color:var(--text-main); border:1px solid var(--glass-border); padding: 4px 10px;" onclick="closeAdminPasswordModal()">✕</button>
-    </div>
-    <p style="font-size:0.8rem; color:var(--text-sub);">Enter your secure administrator password to manage settings.</p>
-
-    <div class="field-group">
-      <label class="field-label">Password</label>
-      <div style="position: relative; display: flex; align-items: center;">
-        <input type="password" id="adminPasswordInput" placeholder="Enter password..." onkeydown="if(event.key==='Enter') verifyAdminPassword()" style="padding-right: 40px;">
-        <button type="button" onclick="toggleAdminPasswordVisibility()" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.9rem; padding: 4px;" title="Show/Hide Password" aria-label="Toggle Password Visibility">👁</button>
-      </div>
-      <div class="error-msg" id="adminPasswordErr">Incorrect password. Please try again.</div>
-    </div>
-
-    <div style="display:flex; gap: 8px; margin-top: 4px;">
-      <button class="btn-unified" style="flex:1;" onclick="verifyAdminPassword()">Unlock Settings</button>
-    </div>
-  </div>
-</div>
+      <!-- admin password modal: moved to owner.html -->
 
 <!-- Generic confirm / prompt modal (used in place of native confirm()/prompt() dialogs, which
      some browsers and embedded/preview environments block or suppress silently). -->
@@ -4164,28 +4126,7 @@
 </div>
 
 <!-- Link GCash Account modal (opened from the Payment Merchant tab in Admin Settings) -->
-<div class="admin-modal-backdrop" id="gcashLinkModalBackdrop">
-  <div class="admin-modal" style="max-width: 380px;">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <h3 style="font-size: 1.1rem;">Link GCash Account</h3>
-      <button class="btn-unified" style="background:transparent; color:var(--text-main); border:1px solid var(--glass-border); padding: 4px 10px;" onclick="closeGcashLinkModal()">✕</button>
-    </div>
-    <p style="font-size:0.8rem; color:var(--text-sub); margin:0;">This is the GCash account customers will be shown when they choose to pay with GCash.</p>
-    <div class="field-group">
-      <label class="field-label">Account Name</label>
-      <input type="text" id="gcashLinkNameInput" placeholder="e.g. Juan D." onkeydown="if(event.key==='Enter') document.getElementById('gcashLinkNumberInput').focus()">
-    </div>
-    <div class="field-group">
-      <label class="field-label">GCash Number</label>
-      <input type="tel" id="gcashLinkNumberInput" placeholder="e.g. 09171234567" inputmode="numeric" onkeydown="if(event.key==='Enter') confirmGcashLink()">
-      <div class="error-msg" id="gcashLinkErr">Please check the fields above.</div>
-    </div>
-    <div style="display:flex; gap: 8px; margin-top: 4px;">
-      <button class="btn-unified" style="flex:1; background:transparent; color:var(--text-main); border:1px solid var(--glass-border);" onclick="closeGcashLinkModal()">Cancel</button>
-      <button class="btn-unified" style="flex:1;" onclick="confirmGcashLink()">🔗 Link Account</button>
-    </div>
-  </div>
-</div>
+      <!-- GCash merchant-link modal: moved to owner.html -->
 
 <!-- Link GCash Account modal (customer-facing — opened from the GCash manual
      payment step during membership sign-up, distinct from the admin one above). -->
@@ -4212,603 +4153,7 @@
   </div>
 </div>
 
-<div class="admin-dock-layer" id="adminDockLayer">
-  <div class="admin-dock" id="adminDock">
-    <div class="admin-dock-titlebar">
-      <div class="admin-dock-title">
-        <span class="admin-dock-dot"></span>
-        <strong>Admin Panel</strong>
-        <span class="admin-dock-owner">— <span id="adminModalOwnerName">Nasrin Abubakar</span></span>
-      </div>
-      <div class="admin-dock-titlebar-actions">
-        <button type="button" class="admin-dock-icon-btn" title="Minimize" aria-label="Minimize Admin Panel" onclick="minimizeAdminDock()">–</button>
-        <button type="button" class="admin-dock-icon-btn" title="Close" aria-label="Close Admin Panel" onclick="closeAdminModal()">✕</button>
-      </div>
-    </div>
-
-    <div class="admin-dock-body">
-      <nav class="admin-tabs" id="adminTabs">
-        <button type="button" class="admin-tab-btn active" data-tab="branding" onclick="showAdminTab('branding')"><svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41L13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg> <span>Branding</span></button>
-        <button type="button" class="admin-tab-btn" data-tab="contact" onclick="showAdminTab('contact')"><svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg> <span>Contact &amp; Calls</span></button>
-        <button type="button" class="admin-tab-btn" data-tab="chat" onclick="showAdminTab('chat')"><svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg> <span>Chat Widget</span></button>
-        <button type="button" class="admin-tab-btn" data-tab="booking" onclick="showAdminTab('booking')"><svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18"/></svg> <span>Booking</span></button>
-        <button type="button" class="admin-tab-btn" data-tab="pricing" onclick="showAdminTab('pricing')"><svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg> <span>Pricing</span></button>
-        <button type="button" class="admin-tab-btn" data-tab="merchant" onclick="showAdminTab('merchant')"><svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 21 8 3 8"/><line x1="4" y1="8" x2="4" y2="21"/><line x1="8" y1="8" x2="8" y2="21"/><line x1="12" y1="8" x2="12" y2="21"/><line x1="16" y1="8" x2="16" y2="21"/><line x1="20" y1="8" x2="20" y2="21"/><line x1="2" y1="21" x2="22" y2="21"/></svg> <span>Payment Merchant</span></button>
-        <button type="button" class="admin-tab-btn" data-tab="services" onclick="showAdminTab('services')"><svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg> <span>Services</span></button>
-        <button type="button" class="admin-tab-btn" data-tab="gallery" onclick="showAdminTab('gallery')"><svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> <span>Gallery</span></button>
-        <button type="button" class="admin-tab-btn" data-tab="team" onclick="showAdminTab('team')"><svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg> <span>Team</span></button>
-        <button type="button" class="admin-tab-btn" data-tab="memberships" onclick="showAdminTab('memberships')"><svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="8" cy="10" r="2"/><path d="M5 17c.5-2 2-3 3-3s2.5 1 3 3"/><line x1="14" y1="8" x2="19" y2="8"/><line x1="14" y1="12" x2="19" y2="12"/></svg> <span>Memberships</span></button>
-        <button type="button" class="admin-tab-btn" data-tab="integrations" onclick="showAdminTab('integrations')"><svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> <span>Integrations</span></button>
-        <button type="button" class="admin-tab-btn" data-tab="security" onclick="showAdminTab('security')"><svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> <span>Security</span></button>
-      </nav>
-
-      <div class="admin-tab-content" id="adminTabContent">
-        <div class="admin-tab-panel active" data-tab="branding">
-          <div class="admin-tab-panel-heading">Branding &amp; Content</div>
-
-    <div class="field-group">
-      <label class="field-label">Full Business Name</label>
-      <input type="text" id="adminBusinessName">
-    </div>
-
-    <div class="field-group">
-      <label class="field-label">Short Brand Name (nav bar)</label>
-      <input type="text" id="adminBrandName">
-      <p style="font-size:0.65rem; color:var(--text-sub); margin:4px 0 0;">If this has more than one word, it will wrap to fit the header instead of getting cut off.</p>
-    </div>
-
-    <div class="field-group">
-      <label class="field-label">Logo</label>
-      <div style="display:flex; align-items:center; gap:12px;">
-        <div id="adminBrandLogoPreview" style="width:52px; height:52px; border-radius:50%; background:var(--input-bg); border:1px solid var(--glass-border); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;"><span style="font-size:0.6rem; color:var(--text-sub);">No logo</span></div>
-        <input type="file" id="adminBrandLogoInput" accept="image/*" style="display:none" onchange="handleBrandLogoUpload(event)">
-        <button type="button" class="btn-unified" style="padding:6px 14px; font-size:0.72rem;" onclick="document.getElementById('adminBrandLogoInput').click()">Upload Logo Picture</button>
-        <button type="button" id="adminBrandLogoRemoveBtn" class="btn-unified btn-prev" style="padding:6px 14px; font-size:0.72rem; display:none;" onclick="removeBrandLogo()">Remove</button>
-      </div>
-      <p style="font-size:0.65rem; color:var(--text-sub); margin:4px 0 0;">Shown in the header instead of the letter badge below. A square PNG with a transparent background looks best.</p>
-    </div>
-
-    <div class="field-group">
-      <label class="field-label">Brand Initial (fallback, used only if no logo is uploaded)</label>
-      <input type="text" id="adminBrandInitial" maxlength="2" style="max-width:100px;">
-    </div>
-
-    <div class="field-group">
-      <label class="field-label">Entrance Animation</label>
-      <div class="liquid-switch-row">
-        <span class="liquid-switch-label" id="adminIntroAnimLabel">Show scissor-cut intro on load</span>
-        <button type="button" class="liquid-switch is-on" id="adminIntroAnimSwitch" onclick="toggleAdminIntroAnimation()" role="switch" aria-checked="true" aria-label="Toggle the scissor-cut entrance animation">
-          <span class="liquid-switch-thumb"></span>
-        </button>
-      </div>
-      <p style="font-size:0.65rem; color:var(--text-sub); margin:6px 0 0;">Plays for every visitor on every load/refresh — a brief animation with the Logo above and the tagline below, before a giant pair of scissors cuts the screen open to reveal the site. Turn this off to skip straight to the site instead.</p>
-      <textarea id="adminIntroTagline" rows="2" style="resize:vertical; margin-top:8px;" placeholder="No more stress. Primus is your partner make you look outstanding"></textarea>
-    </div>
-
-    <div class="field-group">
-      <label class="field-label">Hero Title</label>
-      <input type="text" id="adminHeroTitle">
-    </div>
-
-    <div class="field-group">
-      <label class="field-label">Hero Subtitle</label>
-      <textarea id="adminHeroSub" rows="2" style="resize:vertical;"></textarea>
-    </div>
-
-    <div class="field-group">
-      <label class="field-label">Footer Description</label>
-      <textarea id="adminFooterDesc" rows="2" style="resize:vertical;"></textarea>
-    </div>
-
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-      <div class="field-group">
-        <label class="field-label">Owner Name</label>
-        <input type="text" id="adminOwnerName">
-      </div>
-      <div class="field-group">
-        <label class="field-label">Copyright Text (after year)</label>
-        <input type="text" id="adminCopyrightText">
-      </div>
-    </div>
-
-            </div>
-        <div class="admin-tab-panel" data-tab="contact">
-          <div class="admin-tab-panel-heading">Contact &amp; Social Links</div>
-
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-      <div class="field-group">
-        <label class="field-label">Contact Email</label>
-        <input type="email" id="adminContactEmail">
-        <div class="error-msg" id="adminContactEmailErr" style="display:none;">Please enter a valid email address.</div>
-      </div>
-      <div class="field-group">
-        <label class="field-label">Contact Phone / SMS</label>
-        <div style="display:flex; gap:6px;">
-          <select id="adminContactPhoneCountry" class="country-code-select" style="flex:0 0 auto; max-width:45%;"></select>
-          <input type="tel" id="adminContactPhone" inputmode="numeric" placeholder="e.g. 9123456789" maxlength="10" style="flex:1;" oninput="restrictPhoneDigits(this)">
-        </div>
-        <div class="error-msg" id="adminContactPhoneErr" style="display:none;">Please select a country and enter a valid phone number (7–10 digits).</div>
-      </div>
-    </div>
-
-    <div class="field-group">
-      <label class="field-label">Live Call — Support Agents</label>
-      <p style="font-size:0.7rem; color:var(--text-sub); margin:0 0 6px;">Customers calling "Call now" ring whichever approved Support agents currently have their own console open and Live. Each agent gets their own ID from their staff dashboard (Team tab below) — there's no single shared line anymore, so at least one agent must be Live for calls to go through.</p>
-      <div id="adminLiveAgentsContainer" style="max-height:160px; overflow-y:auto; padding:8px; background:var(--input-bg); border:1px solid var(--glass-border); border-radius:12px; display:flex; flex-direction:column; gap:6px;"></div>
-      <label class="field-label" style="margin-top:10px;">Ring Duration (minutes)</label>
-      <input type="number" id="adminCallWaitMinutes" min="0.5" max="15" step="0.5" style="max-width:120px;">
-      <p style="font-size:0.7rem; color:var(--text-sub); margin:6px 0 0;">How long a customer's call rings one agent before trying the next Live agent (or giving up, if that was the last one).</p>
-    </div>
-
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-      <div class="field-group">
-        <label class="field-label">Instagram URL</label>
-        <input type="text" id="adminSocialInstagram" placeholder="Leave blank to hide">
-      </div>
-      <div class="field-group">
-        <label class="field-label">Facebook URL</label>
-        <input type="text" id="adminSocialFacebook" placeholder="Leave blank to hide">
-      </div>
-    </div>
-
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-      <div class="field-group">
-        <label class="field-label">TikTok URL</label>
-        <input type="text" id="adminSocialTiktok" placeholder="Leave blank to hide">
-      </div>
-      <div class="field-group">
-        <label class="field-label">Twitter / X URL</label>
-        <input type="text" id="adminSocialTwitter" placeholder="Leave blank to hide">
-      </div>
-    </div>
-
-            </div>
-        <div class="admin-tab-panel" data-tab="chat">
-          <div class="admin-tab-panel-heading">Chat Widget</div>
-    <div class="field-group">
-      <label class="field-label">Chat Welcome Message</label>
-      <textarea id="adminChatWelcome" rows="2" style="resize:vertical;"></textarea>
-    </div>
-
-    <div style="margin-top:16px; padding: 14px; border-radius: 14px; background: var(--input-bg); border: 1px solid var(--glass-border);">
-      <div style="font-weight:700; font-size:0.9rem; margin-bottom:4px;">AI Assistant</div>
-      <p style="font-size:0.72rem; color:var(--text-sub); margin:0 0 10px 0;">By default, the chat answers customers using your services, hours, barbers, and membership info above — no external AI, no cost, works everywhere. Turning this on instead sends the conversation to GPT, Claude, and Gemini for richer answers.</p>
-
-      <div id="adminAiServerNotice" style="display:none; padding:10px 12px; border-radius:10px; background:rgba(255,159,10,0.12); border:1px solid rgba(255,159,10,0.4); font-size:0.72rem; margin-bottom:12px;">
-        ⚠️ This page isn't connected to the backend server right now, so Advanced AI can't run. Run <code>server.js</code> (see the included README) with at least one of OPENAI_API_KEY / ANTHROPIC_API_KEY / GEMINI_API_KEY set as an environment variable — the keys stay on the server and are never sent to this browser.
-      </div>
-
-      <div class="admin-toggle-row">
-        <div class="admin-toggle-label">
-          <div style="font-weight: 700; font-size: 0.9rem;">Use Advanced AI (GPT + Claude + Gemini)</div>
-          <div style="font-size: 0.75rem; color: var(--text-sub);" id="adminAiStatusLabel"></div>
-        </div>
-        <label class="admin-toggle">
-          <input type="checkbox" id="adminAdvancedAIEnabled" style="opacity: 0; width: 0; height: 0;">
-          <span></span>
-        </label>
-      </div>
-    </div>
-
-            </div>
-        <div class="admin-tab-panel" data-tab="booking">
-          <div class="admin-tab-panel-heading">Booking Availability</div>
-
-    <div style="padding: 14px; border-radius: 14px; background: var(--input-bg); border: 1px solid var(--glass-border); display:flex; flex-direction:column; gap:12px;">
-      <div class="admin-toggle-row">
-        <div class="admin-toggle-label">
-          <div style="font-weight: 700; font-size: 0.9rem;">Calendar Availability Active</div>
-          <div style="font-size: 0.75rem; color: var(--text-sub);">Turn online booking globally on or off.</div>
-        </div>
-        <label class="admin-toggle">
-          <input type="checkbox" id="adminCalendarActive" style="opacity: 0; width: 0; height: 0;">
-          <span></span>
-        </label>
-      </div>
-
-      <div class="admin-toggle-row" style="border-top: 1px solid var(--glass-border); padding-top: 10px;">
-        <div class="admin-toggle-label">
-          <div style="font-weight: 700; font-size: 0.9rem;">Membership Numbers Active</div>
-          <div style="font-size: 0.75rem; color: var(--text-sub);">Enable or disable membership generation and verification. Individual numbers still require manual activation below.</div>
-        </div>
-        <label class="admin-toggle">
-          <input type="checkbox" id="adminMembershipActive" style="opacity: 0; width: 0; height: 0;">
-          <span></span>
-        </label>
-      </div>
-
-      <div class="field-group" style="margin-top: 4px;">
-        <label class="field-label">Blocked Dates (Comma-separated YYYY-MM-DD)</label>
-        <input type="text" id="adminBlockedDates" placeholder="e.g. 2026-12-25, 2026-12-31">
-      </div>
-    </div>
-
-            </div>
-        <div class="admin-tab-panel" data-tab="pricing">
-          <div class="admin-tab-panel-heading">Pricing &amp; Membership</div>
-
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-      <div class="field-group">
-        <label class="field-label">Subscription Amount</label>
-        <input type="number" id="adminSubscriptionAmount" placeholder="e.g. 500">
-      </div>
-      <div class="field-group">
-        <label class="field-label">Discount Rate (%)</label>
-        <input type="number" id="adminDiscountRate" placeholder="e.g. 15">
-      </div>
-    </div>
-
-    <div class="field-group">
-      <label class="field-label">Currency Symbol</label>
-      <input type="text" id="adminCurrency" placeholder="e.g. ₱, $, €, etc.">
-    </div>
-
-            </div>
-        <div class="admin-tab-panel" data-tab="merchant">
-          <div class="admin-tab-panel-heading">Payment Merchant — Where Money Goes</div>
-          <p style="font-size:0.72rem; color:var(--text-sub); margin:0 0 10px 0;">Fill in where each payment method should send money. Customers will see these exact details (or be redirected to a live secure checkout) when they pay for membership.</p>
-
-          <div id="adminMerchantServerNotice" style="display:none; padding:10px 12px; border-radius:10px; background:rgba(255,159,10,0.12); border:1px solid rgba(255,159,10,0.4); font-size:0.72rem; margin-bottom:12px;">
-            ⚠️ This page isn't connected to the backend server right now, so these settings will only save to this browser. Run <code>server.js</code> (see the included README) so Payment Merchant settings — and membership numbers — are shared across every device.
-          </div>
-
-          <div style="padding:12px; border-radius:12px; background:var(--input-bg); border:1px solid var(--glass-border); margin-bottom:14px;">
-            <div style="font-weight:700; font-size:0.9rem; margin-bottom:4px;">Payment Mode</div>
-            <div style="font-size:0.75rem; color:var(--text-sub); margin-bottom:10px;" id="adminPaymongoStatusLabel">Choose how customers pay for membership.</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
-              <button type="button" class="btn-unified" id="adminPayModeManualBtn" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.78rem; padding:10px; font-weight:700;" onclick="setAdminPaymentMode('manual')">Manual</button>
-              <button type="button" class="btn-unified" id="adminPayModePaymongoBtn" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.78rem; padding:10px; font-weight:700;" onclick="setAdminPaymentMode('paymongo')">PayMongo Direct</button>
-              <button type="button" class="btn-unified" id="adminPayModeXenditBtn" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.78rem; padding:10px; font-weight:700;" onclick="setAdminPaymentMode('xendit')">Xendit Direct</button>
-            </div>
-            <p style="font-size:0.68rem; color:var(--text-sub); margin:8px 0 0;"><strong>Manual</strong>: customers send payment themselves (GCash, Maya, GoTyme, Mari Bank, PayPal, or a QR you upload) and staff verifies it. <strong>PayMongo Direct</strong> / <strong>Xendit Direct</strong>: customers pay Card / GCash / Maya on a live checkout page for that gateway and membership activates automatically — every manual method is hidden from customers in either live mode. Xendit is offered as an alternative to PayMongo — same idea, different provider and fees — so you can compare and pick whichever works better for you; only one live gateway is ever active for customers at a time.</p>
-            <!-- Actual saved values — kept as hidden checkboxes so the rest of the save/load pipeline (saveAdminSettings, requireAdmin state merge, etc.) needs no changes. Driven entirely by setAdminPaymentMode()/renderAdminPaymentModeButtons() above. -->
-            <input type="checkbox" id="adminPaymongoEnabled" style="display:none;">
-            <input type="checkbox" id="adminXenditEnabled" style="display:none;">
-          </div>
-
-
-          <div style="padding:12px; border-radius:12px; background:var(--input-bg); border:1px solid var(--glass-border); margin-bottom:12px;">
-            <div class="admin-tab-panel-heading" style="font-size:0.85rem; margin-bottom:8px;">GCash</div>
-            <!-- Actual saved values live here (read by saveAdminSettings, written by openAdminModal +
-                 the Link Account modal below) — kept as hidden inputs so the rest of the save/load
-                 pipeline needs no changes, while the visible UI is the linked/unlinked card below. -->
-            <input type="hidden" id="adminGcashName">
-            <input type="hidden" id="adminGcashNumber">
-            <div id="adminGcashUnlinked" style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:12px; border-radius:10px; background:var(--glass-bg); border:1px dashed var(--glass-border); margin-bottom:10px;">
-              <span class="pm-badge pm-badge-gcash" style="flex-shrink:0;">GCash</span>
-              <div style="flex:1; min-width:140px; font-size:0.75rem; color:var(--text-sub);">No GCash account linked yet — customers can't pay via GCash until you link one.</div>
-              <button type="button" class="btn-unified" style="font-size:0.72rem; padding:8px 14px; white-space:nowrap; flex-shrink:0;" onclick="openGcashLinkModal()">🔗 Link Account</button>
-            </div>
-            <div id="adminGcashLinked" style="display:none; flex-wrap:wrap; align-items:center; gap:12px; padding:12px; border-radius:10px; background:var(--glass-bg); border:1px solid var(--glass-border); margin-bottom:10px;">
-              <span class="pm-badge pm-badge-gcash" style="flex-shrink:0;">GCash</span>
-              <div style="flex:1; min-width:140px;">
-                <div style="font-weight:700; font-size:0.82rem;" id="adminGcashLinkedNumber">--</div>
-                <div style="font-size:0.7rem; color:var(--text-sub);" id="adminGcashLinkedName">--</div>
-              </div>
-              <button type="button" class="btn-unified" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.7rem; padding:7px 12px; flex-shrink:0;" onclick="openGcashLinkModal()">Change</button>
-              <button type="button" class="btn-unified" style="background:transparent; border:1px solid var(--glass-border); color:#ef4444; font-size:0.7rem; padding:7px 12px; flex-shrink:0;" onclick="unlinkGcashAccount()">Unlink</button>
-            </div>
-            <div class="field-group">
-              <label class="field-label">QR Code (optional)</label>
-              <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-                <div id="adminGcashQrPreview" style="width:52px; height:52px; border-radius:8px; background:#fff; border:1px solid var(--glass-border); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;"><span style="font-size:0.5rem; color:#999;">No QR</span></div>
-                <button type="button" class="btn-unified" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.7rem; padding:7px 12px;" onclick="document.getElementById('adminGcashQrInput').click()">Upload QR Code</button>
-                <button type="button" id="adminGcashQrRemoveBtn" class="btn-unified" style="display:none; background:transparent; border:1px solid var(--glass-border); color:#ef4444; font-size:0.7rem; padding:7px 12px;" onclick="removeMerchantQr('gcash')">Remove</button>
-                <input type="file" id="adminGcashQrInput" accept="image/*" style="display:none" onchange="handleMerchantQrUpload(event,'gcash')">
-              </div>
-              <input type="text" id="adminGcashQr" placeholder="or paste an image URL" oninput="updateMerchantQrPreview('gcash', this.value)">
-            </div>
-            <div class="field-group">
-              <label class="field-label">Brand Logo (optional)</label>
-              <div style="display:flex; align-items:center; gap:10px;">
-                <div id="adminGcashLogoPreview" style="width:44px; height:44px; border-radius:8px; background:#fff; border:1px solid var(--glass-border); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;"><span style="font-size:0.55rem; color:#999;">No logo</span></div>
-                <button type="button" class="btn-unified" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.7rem; padding:7px 12px;" onclick="document.getElementById('adminGcashLogoInput').click()">Upload Logo</button>
-                <button type="button" id="adminGcashLogoRemoveBtn" class="btn-unified" style="display:none; background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.7rem; padding:7px 12px;" onclick="removeMerchantLogo('gcash')">Remove</button>
-                <input type="file" id="adminGcashLogoInput" accept="image/*" style="display:none" onchange="handleMerchantLogoUpload(event,'gcash')">
-              </div>
-              <p style="font-size:0.65rem; color:var(--text-sub); margin:4px 0 0;">Upload the official GCash logo (a PNG with a transparent background looks best). Shown to customers in the payment method picker instead of the placeholder badge.</p>
-            </div>
-            <p style="font-size:0.68rem; color:var(--text-sub); margin:2px 0 0;">Used automatically when Live Checkout above is on. Shown manually to customers (for a bank-transfer style payment) when it's off.</p>
-          </div>
-
-          <div style="padding:12px; border-radius:12px; background:var(--input-bg); border:1px solid var(--glass-border); margin-bottom:12px;">
-            <div class="admin-tab-panel-heading" style="font-size:0.85rem; margin-bottom:8px;">Maya</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-              <div class="field-group"><label class="field-label">Account Name</label><input type="text" id="adminMayaName" placeholder="e.g. Juan D."></div>
-              <div class="field-group"><label class="field-label">Maya Number</label><input type="text" id="adminMayaNumber" placeholder="e.g. 09xxxxxxxxx"></div>
-            </div>
-            <div class="field-group">
-              <label class="field-label">QR Code (optional)</label>
-              <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-                <div id="adminMayaQrPreview" style="width:52px; height:52px; border-radius:8px; background:#fff; border:1px solid var(--glass-border); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;"><span style="font-size:0.5rem; color:#999;">No QR</span></div>
-                <button type="button" class="btn-unified" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.7rem; padding:7px 12px;" onclick="document.getElementById('adminMayaQrInput').click()">Upload QR Code</button>
-                <button type="button" id="adminMayaQrRemoveBtn" class="btn-unified" style="display:none; background:transparent; border:1px solid var(--glass-border); color:#ef4444; font-size:0.7rem; padding:7px 12px;" onclick="removeMerchantQr('maya')">Remove</button>
-                <input type="file" id="adminMayaQrInput" accept="image/*" style="display:none" onchange="handleMerchantQrUpload(event,'maya')">
-              </div>
-              <input type="text" id="adminMayaQr" placeholder="or paste an image URL" oninput="updateMerchantQrPreview('maya', this.value)">
-            </div>
-            <div class="field-group">
-              <label class="field-label">Brand Logo (optional)</label>
-              <div style="display:flex; align-items:center; gap:10px;">
-                <div id="adminMayaLogoPreview" style="width:44px; height:44px; border-radius:8px; background:#fff; border:1px solid var(--glass-border); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;"><span style="font-size:0.55rem; color:#999;">No logo</span></div>
-                <button type="button" class="btn-unified" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.7rem; padding:7px 12px;" onclick="document.getElementById('adminMayaLogoInput').click()">Upload Logo</button>
-                <button type="button" id="adminMayaLogoRemoveBtn" class="btn-unified" style="display:none; background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.7rem; padding:7px 12px;" onclick="removeMerchantLogo('maya')">Remove</button>
-                <input type="file" id="adminMayaLogoInput" accept="image/*" style="display:none" onchange="handleMerchantLogoUpload(event,'maya')">
-              </div>
-              <p style="font-size:0.65rem; color:var(--text-sub); margin:4px 0 0;">Upload the official Maya logo (a PNG with a transparent background looks best). Shown to customers in the payment method picker instead of the placeholder badge.</p>
-            </div>
-          </div>
-
-          <div style="padding:12px; border-radius:12px; background:var(--input-bg); border:1px solid var(--glass-border); margin-bottom:12px;">
-            <div class="admin-tab-panel-heading" style="font-size:0.85rem; margin-bottom:8px;">GoTyme Bank</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-              <div class="field-group"><label class="field-label">Account Name</label><input type="text" id="adminGotymeName" placeholder="e.g. Juan D."></div>
-              <div class="field-group"><label class="field-label">Account Number</label><input type="text" id="adminGotymeNumber" placeholder="10-digit account number"></div>
-            </div>
-            <div class="field-group">
-              <label class="field-label">QR Code (optional)</label>
-              <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-                <div id="adminGotymeQrPreview" style="width:52px; height:52px; border-radius:8px; background:#fff; border:1px solid var(--glass-border); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;"><span style="font-size:0.5rem; color:#999;">No QR</span></div>
-                <button type="button" class="btn-unified" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.7rem; padding:7px 12px;" onclick="document.getElementById('adminGotymeQrInput').click()">Upload QR Code</button>
-                <button type="button" id="adminGotymeQrRemoveBtn" class="btn-unified" style="display:none; background:transparent; border:1px solid var(--glass-border); color:#ef4444; font-size:0.7rem; padding:7px 12px;" onclick="removeMerchantQr('gotyme')">Remove</button>
-                <input type="file" id="adminGotymeQrInput" accept="image/*" style="display:none" onchange="handleMerchantQrUpload(event,'gotyme')">
-              </div>
-              <input type="text" id="adminGotymeQr" placeholder="or paste an image URL" oninput="updateMerchantQrPreview('gotyme', this.value)">
-            </div>
-            <div class="field-group">
-              <label class="field-label">Brand Logo (optional)</label>
-              <div style="display:flex; align-items:center; gap:10px;">
-                <div id="adminGotymeLogoPreview" style="width:44px; height:44px; border-radius:8px; background:#fff; border:1px solid var(--glass-border); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;"><span style="font-size:0.55rem; color:#999;">No logo</span></div>
-                <button type="button" class="btn-unified" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.7rem; padding:7px 12px;" onclick="document.getElementById('adminGotymeLogoInput').click()">Upload Logo</button>
-                <button type="button" id="adminGotymeLogoRemoveBtn" class="btn-unified" style="display:none; background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.7rem; padding:7px 12px;" onclick="removeMerchantLogo('gotyme')">Remove</button>
-                <input type="file" id="adminGotymeLogoInput" accept="image/*" style="display:none" onchange="handleMerchantLogoUpload(event,'gotyme')">
-              </div>
-              <p style="font-size:0.65rem; color:var(--text-sub); margin:4px 0 0;">Upload the official GoTyme logo (a PNG with a transparent background looks best). Shown to customers in the payment method picker instead of the placeholder badge.</p>
-            </div>
-            <p style="font-size:0.68rem; color:var(--text-sub); margin:2px 0 0;">GoTyme transfers are always shown to the customer to complete manually, then verified by you in the Memberships tab — there's no automatic charge for this rail.</p>
-          </div>
-
-          <div style="padding:12px; border-radius:12px; background:var(--input-bg); border:1px solid var(--glass-border); margin-bottom:12px;">
-            <div class="admin-tab-panel-heading" style="font-size:0.85rem; margin-bottom:8px;">Mari Bank</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-              <div class="field-group"><label class="field-label">Account Name</label><input type="text" id="adminMaribankName" placeholder="e.g. Juan D."></div>
-              <div class="field-group"><label class="field-label">Account Number</label><input type="text" id="adminMaribankNumber" placeholder="Account number"></div>
-            </div>
-            <div class="field-group">
-              <label class="field-label">QR Code (optional)</label>
-              <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-                <div id="adminMaribankQrPreview" style="width:52px; height:52px; border-radius:8px; background:#fff; border:1px solid var(--glass-border); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;"><span style="font-size:0.5rem; color:#999;">No QR</span></div>
-                <button type="button" class="btn-unified" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.7rem; padding:7px 12px;" onclick="document.getElementById('adminMaribankQrInput').click()">Upload QR Code</button>
-                <button type="button" id="adminMaribankQrRemoveBtn" class="btn-unified" style="display:none; background:transparent; border:1px solid var(--glass-border); color:#ef4444; font-size:0.7rem; padding:7px 12px;" onclick="removeMerchantQr('maribank')">Remove</button>
-                <input type="file" id="adminMaribankQrInput" accept="image/*" style="display:none" onchange="handleMerchantQrUpload(event,'maribank')">
-              </div>
-              <input type="text" id="adminMaribankQr" placeholder="or paste an image URL" oninput="updateMerchantQrPreview('maribank', this.value)">
-            </div>
-            <div class="field-group">
-              <label class="field-label">Brand Logo (optional)</label>
-              <div style="display:flex; align-items:center; gap:10px;">
-                <div id="adminMaribankLogoPreview" style="width:44px; height:44px; border-radius:8px; background:#fff; border:1px solid var(--glass-border); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;"><span style="font-size:0.55rem; color:#999;">No logo</span></div>
-                <button type="button" class="btn-unified" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.7rem; padding:7px 12px;" onclick="document.getElementById('adminMaribankLogoInput').click()">Upload Logo</button>
-                <button type="button" id="adminMaribankLogoRemoveBtn" class="btn-unified" style="display:none; background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.7rem; padding:7px 12px;" onclick="removeMerchantLogo('maribank')">Remove</button>
-                <input type="file" id="adminMaribankLogoInput" accept="image/*" style="display:none" onchange="handleMerchantLogoUpload(event,'maribank')">
-              </div>
-              <p style="font-size:0.65rem; color:var(--text-sub); margin:4px 0 0;">Upload the official Mari Bank logo (a PNG with a transparent background looks best). Shown to customers in the payment method picker instead of the placeholder badge.</p>
-            </div>
-            <p style="font-size:0.68rem; color:var(--text-sub); margin:2px 0 0;">Also a manual, staff-verified transfer — same as GoTyme above.</p>
-          </div>
-
-          <div style="padding:12px; border-radius:12px; background:var(--input-bg); border:1px solid var(--glass-border); margin-bottom:12px;">
-            <div class="admin-tab-panel-heading" style="font-size:0.85rem; margin-bottom:8px;">PayPal</div>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-              <div class="field-group"><label class="field-label">Account / Business Name</label><input type="text" id="adminPaypalName" placeholder="e.g. Primus Barbershop"></div>
-              <div class="field-group"><label class="field-label">PayPal Email or PayPal.me Link</label><input type="text" id="adminPaypalNumber" placeholder="e.g. you@example.com or paypal.me/yourshop"></div>
-            </div>
-            <div class="field-group">
-              <label class="field-label">QR Code (optional)</label>
-              <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-                <div id="adminPaypalQrPreview" style="width:52px; height:52px; border-radius:8px; background:#fff; border:1px solid var(--glass-border); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;"><span style="font-size:0.5rem; color:#999;">No QR</span></div>
-                <button type="button" class="btn-unified" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.7rem; padding:7px 12px;" onclick="document.getElementById('adminPaypalQrInput').click()">Upload QR Code</button>
-                <button type="button" id="adminPaypalQrRemoveBtn" class="btn-unified" style="display:none; background:transparent; border:1px solid var(--glass-border); color:#ef4444; font-size:0.7rem; padding:7px 12px;" onclick="removeMerchantQr('paypal')">Remove</button>
-                <input type="file" id="adminPaypalQrInput" accept="image/*" style="display:none" onchange="handleMerchantQrUpload(event,'paypal')">
-              </div>
-              <input type="text" id="adminPaypalQr" placeholder="or paste an image URL" oninput="updateMerchantQrPreview('paypal', this.value)">
-            </div>
-            <p style="font-size:0.68rem; color:var(--text-sub); margin:2px 0 0;">Manual, staff-verified transfer — same as GoTyme/Mari Bank above. Customers send payment via PayPal, then enter their transaction reference.</p>
-          </div>
-
-          <div style="padding:12px; border-radius:12px; background:var(--input-bg); border:1px solid var(--glass-border);">
-            <div class="admin-tab-panel-heading" style="font-size:0.85rem; margin-bottom:8px;">Generic "Scan PH QR Code"</div>
-            <div class="field-group"><label class="field-label">Label shown to customer</label><input type="text" id="adminGenericQrLabel" placeholder="e.g. Scan to Pay (PH QR)"></div>
-            <div class="field-group">
-              <label class="field-label">QR Code</label>
-              <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-                <div id="adminGenericQrPreview" style="width:52px; height:52px; border-radius:8px; background:#fff; border:1px solid var(--glass-border); display:flex; align-items:center; justify-content:center; overflow:hidden; flex-shrink:0;"><span style="font-size:0.5rem; color:#999;">No QR</span></div>
-                <button type="button" class="btn-unified" style="background:transparent; border:1px solid var(--glass-border); color:var(--text-main); font-size:0.7rem; padding:7px 12px;" onclick="document.getElementById('adminGenericQrInput').click()">Upload QR Code</button>
-                <button type="button" id="adminGenericQrRemoveBtn" class="btn-unified" style="display:none; background:transparent; border:1px solid var(--glass-border); color:#ef4444; font-size:0.7rem; padding:7px 12px;" onclick="removeMerchantQr('genericQr')">Remove</button>
-                <input type="file" id="adminGenericQrInput" accept="image/*" style="display:none" onchange="handleMerchantQrUpload(event,'genericQr')">
-              </div>
-              <input type="text" id="adminGenericQrImage" placeholder="or paste an image URL" oninput="updateMerchantQrPreview('genericQr', this.value)">
-            </div>
-            <p style="font-size:0.68rem; color:var(--text-sub); margin:2px 0 0;">Any static QR — your bank's QRPh code, GCash QR, etc. Also manually staff-verified.</p>
-          </div>
-
-            </div>
-        <div class="admin-tab-panel" data-tab="services">
-          <div class="admin-tab-panel-heading">Services &amp; Booking Options</div>
-
-    <div class="field-group">
-      <label class="field-label">Services (JSON Format)</label>
-      <textarea id="adminServices" rows="5" style="font-family:monospace; font-size:16px; resize:vertical;"></textarea>
-    </div>
-
-    <div class="field-group">
-      <label class="field-label">Barbers / Specialists (Comma-separated)</label>
-      <input type="text" id="adminBarbers">
-    </div>
-
-    <div class="field-group">
-      <label class="field-label">Available Time Slots (Comma-separated)</label>
-      <input type="text" id="adminTimeSlots">
-    </div>
-
-    <div class="field-group">
-      <label class="field-label">Business Hours (JSON Format)</label>
-      <textarea id="adminHours" rows="4" style="font-family:monospace; font-size:16px; resize:vertical;"></textarea>
-    </div>
-
-            </div>
-        <div class="admin-tab-panel" data-tab="gallery">
-          <div class="admin-tab-panel-heading">Gallery</div>
-
-    <div class="field-group">
-      <label class="field-label">Photos</label>
-      <p style="font-size:0.72rem; color:var(--text-sub); margin:0 0 4px 0;">Upload photos from your device. Each is resized automatically and saved right in this browser — no separate image hosting needed. Add a title and short caption for each, then remove any you no longer want with the ✕.</p>
-      <div id="adminGalleryListContainer" style="display:flex; flex-direction:column; gap:10px;"></div>
-      <input type="file" id="galleryFileInput" accept="image/*" multiple style="display:none" onchange="handleGalleryUpload(event)">
-      <button type="button" class="btn-unified" style="margin-top:4px; align-self:flex-start;" onclick="document.getElementById('galleryFileInput').click()">+ Add Photos</button>
-      <div id="galleryUploadStatus" style="font-size:0.72rem; color:var(--text-sub);"></div>
-    </div>
-
-            </div>
-        <div class="admin-tab-panel" data-tab="team">
-          <div class="admin-tab-panel-heading">Team &amp; Staff Accounts</div>
-
-    <p style="font-size:0.72rem; color:var(--text-sub); margin: 0;">Barbers, Admins, and Support staff all create their own account from the "Barber Login" link in the site menu (using the sign-up section that matches their role) and log in the same way. New sign-ups stay pending until you activate them below — only activated barbers appear in "Meet the Team". Admin/Support accounts are internal staff profiles only; they do not grant access to this Admin Settings panel, which stays protected by your Admin Password.</p>
-
-    <div class="field-group">
-      <label class="field-label">Barber Positions (comma-separated)</label>
-      <input type="text" id="adminBarberPositions">
-    </div>
-    <div class="field-group">
-      <label class="field-label">Staff Positions — Admin/Support (comma-separated)</label>
-      <input type="text" id="adminStaffPositions">
-    </div>
-    <div class="field-group">
-      <label class="field-label">Status Options — shown to everyone (comma-separated)</label>
-      <input type="text" id="adminStaffStatuses">
-    </div>
-
-    <div class="field-group">
-      <label class="field-label">Registered Staff Accounts (Barbers, Admin &amp; Support)</label>
-      <div id="adminBarberAccountsContainer" style="max-height: 220px; overflow-y: auto; padding: 8px; background: var(--input-bg); border: 1px solid var(--glass-border); border-radius: 12px; display: flex; flex-direction: column; gap: 6px;"></div>
-    </div>
-
-            </div>
-        <div class="admin-tab-panel" data-tab="memberships">
-          <div class="admin-tab-panel-heading">Manage Memberships</div>
-
-    <p style="font-size:0.72rem; color:var(--text-sub); margin: 0;">New and renewed membership numbers always appear here as inactive until you click "Enable" — this is the only way a customer's number will apply their discount.</p>
-
-    <div class="field-group">
-      <label class="field-label">Disable, Enable &amp; Delete Individual Memberships</label>
-      <div id="adminMembersListContainer" style="max-height: 180px; overflow-y: auto; padding: 8px; background: var(--input-bg); border: 1px solid var(--glass-border); border-radius: 12px; display: flex; flex-direction: column; gap: 6px;"></div>
-    </div>
-
-            </div>
-        <div class="admin-tab-panel" data-tab="integrations">
-          <div class="admin-tab-panel-heading">Integrations (EmailJS)</div>
-
-    <div id="integrationsLockGate">
-      <p style="font-size:0.8rem; color:var(--text-sub); margin:0 0 10px;">🔒 These are sensitive API credentials. Re-enter your admin password to view or edit them.</p>
-      <div class="field-group">
-        <label class="field-label">Admin Password</label>
-        <div style="position: relative; display: flex; align-items: center;">
-          <input type="password" id="integrationsUnlockPwInput" placeholder="Enter admin password..." onkeydown="if(event.key==='Enter') unlockIntegrationsSection()" style="padding-right: 40px;">
-          <button type="button" onclick="toggleIntegrationsUnlockPwVisibility()" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.9rem; padding: 4px;" title="Show/Hide Password" aria-label="Toggle Password Visibility">👁</button>
-        </div>
-        <div class="error-msg" id="integrationsUnlockPwErr" style="display:none;">Incorrect password. Please try again.</div>
-      </div>
-      <button type="button" class="btn-unified" style="width:100%;" onclick="unlockIntegrationsSection()">🔓 Unlock Integrations</button>
-    </div>
-
-    <div id="integrationsFieldsContent" style="display:none;">
-
-    <div class="field-group">
-      <label class="field-label">EmailJS Public Key</label>
-      <div style="position: relative; display: flex; align-items: center;">
-        <input type="password" id="adminEmailPublicKey" style="padding-right: 40px;">
-        <button type="button" onclick="toggleIntegrationFieldVisibility('adminEmailPublicKey')" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.9rem; padding: 4px;" title="Show/Hide" aria-label="Toggle Visibility">👁</button>
-      </div>
-    </div>
-
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-      <div class="field-group">
-        <label class="field-label">EmailJS Service ID</label>
-        <div style="position: relative; display: flex; align-items: center;">
-          <input type="password" id="adminEmailServiceId" style="padding-right: 40px;">
-          <button type="button" onclick="toggleIntegrationFieldVisibility('adminEmailServiceId')" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.9rem; padding: 4px;" title="Show/Hide" aria-label="Toggle Visibility">👁</button>
-        </div>
-      </div>
-      <div class="field-group">
-        <label class="field-label">Booking Confirmation Template ID</label>
-        <div style="position: relative; display: flex; align-items: center;">
-          <input type="password" id="adminEmailTemplateId" style="padding-right: 40px;">
-          <button type="button" onclick="toggleIntegrationFieldVisibility('adminEmailTemplateId')" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.9rem; padding: 4px;" title="Show/Hide" aria-label="Toggle Visibility">👁</button>
-        </div>
-      </div>
-    </div>
-
-    <div class="field-group">
-      <label class="field-label">Barber Password Reset Template ID</label>
-      <div style="position: relative; display: flex; align-items: center;">
-        <input type="password" id="adminEmailBarberResetTemplateId" placeholder="e.g. template_xxxxxxx" style="padding-right: 40px;">
-        <button type="button" onclick="toggleIntegrationFieldVisibility('adminEmailBarberResetTemplateId')" style="position: absolute; right: 10px; background: transparent; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.9rem; padding: 4px;" title="Show/Hide" aria-label="Toggle Visibility">👁</button>
-      </div>
-      <p style="font-size:0.68rem; color:var(--text-sub); margin:4px 0 0 0;">Create a separate EmailJS template for this with variables <code>{{to_email}}</code>, <code>{{to_name}}</code>, <code>{{new_password}}</code>, and <code>{{business_name}}</code>. Leave blank to fall back to opening your email app manually instead.</p>
-    </div>
-
-    </div>
-
-            </div>
-        <div class="admin-tab-panel" data-tab="security">
-          <div class="admin-tab-panel-heading">Security</div>
-
-    <div class="field-group" id="adminPwResetIdleStep">
-      <label class="field-label">Admin Password</label>
-      <p style="font-size:0.72rem; color:var(--text-sub); margin:0 0 8px;">Your password is never shown here. To change it, scan your face to prove you're the owner, then set a new one.</p>
-      <button type="button" class="btn-unified" onclick="openAdminPwFaceStep()">🔐 Reset Admin Password</button>
-    </div>
-
-    <div class="field-group" id="adminPwResetFaceStep" style="display:none;">
-      <label class="field-label">Face ID Verification</label>
-      <p id="adminPwFaceStatus" style="font-size:0.72rem; color:var(--text-sub); margin:0 0 8px;">Starting camera…</p>
-      <div style="position:relative; width:100%; max-width:260px; aspect-ratio:1/1; margin:0 auto; border-radius:16px; overflow:hidden; background:var(--input-bg); border:1px solid var(--glass-border);">
-        <video id="adminPwFaceVideo" autoplay muted playsinline style="width:100%; height:100%; object-fit:cover; display:none;"></video>
-        <div id="adminPwFaceIdle" style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:0.7rem; color:var(--text-sub);">Camera loading…</div>
-      </div>
-      <div class="error-msg" id="adminPwFaceErr" style="display:none;"></div>
-      <div style="display:flex; gap:8px; margin-top:10px;">
-        <button type="button" class="btn-unified btn-prev" style="flex:1; background:transparent; border:1px solid var(--glass-border); color:var(--text-main);" onclick="cancelAdminPwFaceStep()">Cancel</button>
-        <button type="button" class="btn-unified" style="flex:1;" id="adminPwFaceScanBtn" onclick="captureAdminPwFaceScan()" disabled>Scan Face</button>
-      </div>
-    </div>
-
-    <div class="field-group" id="adminPwResetNewPwStep" style="display:none;">
-      <label class="field-label">New Admin Password</label>
-      <input type="password" id="adminPwNewPassword" placeholder="at least 6 characters">
-      <label class="field-label" style="margin-top:8px;">Confirm New Password</label>
-      <input type="password" id="adminPwNewPassword2" placeholder="repeat new password">
-      <div class="error-msg" id="adminPwNewErr" style="display:none;"></div>
-      <div style="display:flex; gap:8px; margin-top:10px;">
-        <button type="button" class="btn-unified btn-prev" style="flex:1; background:transparent; border:1px solid var(--glass-border); color:var(--text-main);" onclick="cancelAdminPwFaceStep()">Cancel</button>
-        <button type="button" class="btn-unified" style="flex:1;" onclick="saveNewAdminPassword()">Save New Password</button>
-      </div>
-    </div>
-
-            </div>
-      </div>
-    </div>
-
-    <div class="admin-dock-footer">
-      <button class="btn-unified" style="flex:1;" onclick="saveAdminSettings()"><svg viewBox="0 0 24 24" width="13" height="13" style="vertical-align:-2px;margin-right:4px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Save Changes</button>
-      <button class="btn-unified btn-prev" onclick="resetAdminSettings()">Reset Defaults</button>
-    </div>
-  </div>
-
-  <button type="button" class="admin-dock-minimized-pill" id="adminDockMinimizedPill" onclick="restoreAdminDock()">
-    <svg viewBox="0 0 24 24" width="14" height="14" style="vertical-align:-2px;" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg> Admin Panel <span class="admin-dock-pill-hint">(minimized — tap to restore)</span>
-  </button>
-</div>
+      <!-- admin dock panel: moved to owner.html -->
 
 
 <!-- ================= ADMIN LIVE CALL CONSOLE — floating, lower-left, minimizable, non-blocking ================= -->
@@ -6664,7 +6009,9 @@ let currentReviewBarber = '';
     state.date = todayStr;
 
     if (document.documentElement.getAttribute('data-color') === 'clear') {
-      document.getElementById('colorCurrentBtn').classList.add('is-clear');
+      // The accent-colour picker sat inside the admin badge and moved with it.
+    const colorBtnEl = document.getElementById('colorCurrentBtn');
+    if (colorBtnEl) colorBtnEl.classList.add('is-clear');
     }
 
     validateTimeSlots();
@@ -6674,20 +6021,16 @@ let currentReviewBarber = '';
     checkPaymongoReturn();
     resumeMembershipApprovalWatch();
 
-    // ---------- Restore admin session across a refresh ----------
-    // Admin mode stays unlocked (and the panel stays open, on the same tab)
-    // after a browser refresh, exactly as the admin left it — the only way
-    // back to the logged-out view is clicking the 🔒 Lock button.
+    // ---------- Admin session restore: removed ----------
+    // Administration moved to owner.html. This page has no admin panel and no
+    // way into one, so there is no session to restore. Any flags a previous
+    // build left in this browser are cleared rather than acted on.
     try {
-      if (localStorage.getItem('primus_admin_unlocked') === '1') {
-        showAdminHeaderBadge();
-        if (localStorage.getItem('primus_admin_dock_open') === '1') {
-          openAdminModal();
-          const savedTab = localStorage.getItem('primus_admin_active_tab');
-          if (savedTab) showAdminTab(savedTab);
-        }
-      }
-    } catch (e) { /* localStorage unavailable — just stay logged out */ }
+      localStorage.removeItem('primus_admin_unlocked');
+      localStorage.removeItem('primus_admin_dock_open');
+      localStorage.removeItem('primus_admin_active_tab');
+      localStorage.removeItem('primus_admin_settings');
+    } catch (e) { /* localStorage unavailable — nothing to clear */ }
 
     // ---------- Restore a logged-in barber's session across a refresh ----------
     // Supabase's own client already persists the session in this browser
@@ -8047,6 +7390,10 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
   }
 
   function renderAdminPaymentModeButtons() {
+    // The admin panel now lives in owner.html; this page no longer renders
+    // it. Customer and staff flows still call this (e.g. after a barber
+    // signs up), so it has to no-op rather than throw on a missing node.
+    if (!document.getElementById('adminPaymentModeButtons')) return;
     const manualBtn = document.getElementById('adminPayModeManualBtn');
     const paymongoBtn = document.getElementById('adminPayModePaymongoBtn');
     const xenditBtn = document.getElementById('adminPayModeXenditBtn');
@@ -8120,6 +7467,10 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
   }
 
   function renderAdminGalleryEditor() {
+    // The admin panel now lives in owner.html; this page no longer renders
+    // it. Customer and staff flows still call this (e.g. after a barber
+    // signs up), so it has to no-op rather than throw on a missing node.
+    if (!document.getElementById('adminGalleryEditor')) return;
     const container = document.getElementById('adminGalleryListContainer');
     if (!container) return;
     container.innerHTML = '';
@@ -8528,6 +7879,10 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
   }
 
   function renderAdminBarberAccounts() {
+    // The admin panel now lives in owner.html; this page no longer renders
+    // it. Customer and staff flows still call this (e.g. after a barber
+    // signs up), so it has to no-op rather than throw on a missing node.
+    if (!document.getElementById('adminBarberList')) return;
     const container = document.getElementById('adminBarberAccountsContainer');
     if (!container) return;
     container.innerHTML = '';
@@ -8568,6 +7923,10 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
   // old single shared "general" call ID — customers now ring whichever of
   // these agents are actually online.
   function renderAdminLiveAgents() {
+    // The admin panel now lives in owner.html; this page no longer renders
+    // it. Customer and staff flows still call this (e.g. after a barber
+    // signs up), so it has to no-op rather than throw on a missing node.
+    if (!document.getElementById('adminLiveAgentsList')) return;
     const container = document.getElementById('adminLiveAgentsContainer');
     if (!container) return;
     const now = Date.now();
@@ -9032,7 +8391,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       return;
     }
 
-    appSettings.barberAccounts.push(account);
+    mergeOwnStaffRecord(account);
     if (!appSettings.barbers.includes(account.name)) appSettings.barbers.push(account.name);
     renderTeamSection();
     renderAdminBarberAccounts();
@@ -9137,7 +8496,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       return;
     }
 
-    appSettings.barberAccounts.push(account);
+    mergeOwnStaffRecord(account);
     renderAdminBarberAccounts();
 
     // Support (call-center) accounts cannot log in at all until an admin
@@ -9182,32 +8541,43 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     const errEl = document.getElementById('barberLoginErr');
     errEl.style.display = 'none';
 
-    const acct = (appSettings.barberAccounts || []).find(b => b.username === username);
+    // The username -> email lookup and the password check both happen on the
+    // server now. The public /api/state no longer carries anyone's email,
+    // phone, username or face descriptor, so there is no list here to search
+    // — and a failed attempt can't be used to work out who has an account.
+    let acct;
+    try {
+      const resp = await fetch('/api/staff/signin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password: pw })
+      });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok) {
+        errEl.textContent = data.error || 'Incorrect username or password.';
+        errEl.style.display = 'block';
+        return;
+      }
+      acct = data.account;
+      // Hand the session to the Supabase client so the staff member's own
+      // PATCH /api/staff/me calls keep authenticating exactly as before.
+      if (supabaseClient && data.session) {
+        await supabaseClient.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+      }
+    } catch (e) {
+      errEl.textContent = 'Could not reach the server — please check your connection and try again.';
+      errEl.style.display = 'block';
+      return;
+    }
     if (!acct) {
-      errEl.textContent = 'No account found with that username.';
+      errEl.textContent = 'Incorrect username or password.';
       errEl.style.display = 'block';
       return;
     }
-    if (!acct.email || !supabaseClient) {
-      errEl.textContent = 'This account needs to be recreated — please sign up again.';
-      errEl.style.display = 'block';
-      return;
-    }
-    const { error } = await supabaseClient.auth.signInWithPassword({ email: acct.email, password: pw });
-    if (error) {
-      errEl.textContent = 'Incorrect password.';
-      errEl.style.display = 'block';
-      return;
-    }
-
-    // Support (call-center) accounts cannot log in at all until an admin
-    // approves them — every feature, including the console, stays locked out.
-    if (acct.role === 'staff' && acct.position === 'Support' && acct.approved === false) {
-      errEl.textContent = 'Your Support account is awaiting admin approval. Please check back once it has been approved.';
-      errEl.style.display = 'block';
-      supabaseClient.auth.signOut();
-      return;
-    }
+    mergeOwnStaffRecord(acct);
 
     // Username/password are correct, but the account isn't logged in yet —
     // barbers must also pass a face scan before access is granted.
@@ -9797,6 +9167,20 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     }, 500);
   }
 
+  // The public /api/state now sends a projection of each staff member — name,
+  // position, role, status, bio, photo — with no email, phone, username or
+  // face descriptor in it. A signed-in staff member still needs their own
+  // complete record for the dashboard, so the copy returned by
+  // /api/staff/signin (or by signing up) is merged over the projected entry
+  // here. Only ever their own; everyone else stays projected.
+  function mergeOwnStaffRecord(account) {
+    if (!account || !account.id) return;
+    if (!Array.isArray(appSettings.barberAccounts)) appSettings.barberAccounts = [];
+    const i = appSettings.barberAccounts.findIndex(b => b.id === account.id);
+    if (i >= 0) appSettings.barberAccounts[i] = { ...appSettings.barberAccounts[i], ...account };
+    else appSettings.barberAccounts.push(account);
+  }
+
   function getCurrentBarber() {
     return (appSettings.barberAccounts || []).find(b => b.id === currentBarberSession) || null;
   }
@@ -10093,7 +9477,9 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     brandTitleEl.innerText = appSettings.brandName;
     brandTitleEl.title = appSettings.businessName;
     brandTitleEl.classList.toggle('has-space', /\s/.test((appSettings.brandName || '').trim()));
-    document.getElementById('adminModalOwnerName').innerText = appSettings.ownerName;
+    // The owner-name badge lived in the admin dock, now in owner.html.
+    const ownerNameEl = document.getElementById('adminModalOwnerName');
+    if (ownerNameEl) ownerNameEl.innerText = appSettings.ownerName;
 
     document.getElementById('footerBrandName').innerText = appSettings.businessName;
     document.getElementById('footerBrandDesc').innerText = appSettings.footerBrandDesc;
@@ -10583,9 +9969,15 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
   }
 
   function hideAdminHeaderBadge() {
-    document.getElementById('adminHeaderBadge').classList.remove('is-active');
-    document.getElementById('callConsoleFab').classList.remove('show');
-    document.getElementById('devControls').classList.remove('is-active');
+    // The badge itself is gone (admin lives in owner.html), but the call
+    // console FAB and dev controls below are NOT admin UI — a support agent
+    // logging out still relies on this to hide them.
+    const badge = document.getElementById('adminHeaderBadge');
+    if (badge) badge.classList.remove('is-active');
+    const fab = document.getElementById('callConsoleFab');
+    if (fab) fab.classList.remove('show');
+    const dev = document.getElementById('devControls');
+    if (dev) dev.classList.remove('is-active');
   }
 
   function lockAdminSession() {
@@ -10786,12 +10178,9 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     try { localStorage.setItem('primus_admin_dock_open', '1'); } catch (e) {}
   }
 
+  // The admin dock moved to owner.html, but logout and session-lock paths
+  // still call this, so it stays defined and simply has nothing to close.
   function closeAdminModal() {
-    const dock = document.getElementById('adminDock');
-    dock.classList.remove('is-visible');
-    document.getElementById('adminDockMinimizedPill').classList.remove('show');
-    setTimeout(() => { document.getElementById('adminDockLayer').classList.remove('open'); }, 240);
-    try { localStorage.setItem('primus_admin_dock_open', '0'); } catch (e) {}
     integrationsUnlocked = false;
     renderIntegrationsGateState();
   }
@@ -10815,6 +10204,10 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
   }
 
   function renderAdminMembersList() {
+    // The admin panel now lives in owner.html; this page no longer renders
+    // it. Customer and staff flows still call this (e.g. after a barber
+    // signs up), so it has to no-op rather than throw on a missing node.
+    if (!document.getElementById('adminMembersList')) return;
     const container = document.getElementById('adminMembersListContainer');
     container.innerHTML = '';
 
@@ -11107,7 +10500,9 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
   if (savedColor) {
     htmlEl.setAttribute('data-color', savedColor);
     if (savedColor === 'clear') {
-      document.getElementById('colorCurrentBtn').classList.add('is-clear');
+      // The accent-colour picker sat inside the admin badge and moved with it.
+    const colorBtnEl = document.getElementById('colorCurrentBtn');
+    if (colorBtnEl) colorBtnEl.classList.add('is-clear');
     }
   }
 

@@ -99,10 +99,10 @@ async function deleteStaffAuthUser(userId) {
 }
 
 // Verifies a staff member's own access token — the one their browser got
-// back from supabaseClient.auth.signInWithPassword() — and returns who they
-// are. Uses the *publishable* key (not the secret key): this is the same
-// "who is this token for" call the browser SDK itself makes, just run here
-// so the server can trust the result before touching state.json.
+// back from signing in — and returns who they are. Uses the *publishable*
+// key (not the secret key): this is the same "who is this token for" call
+// the browser SDK itself makes, just run here so the server can trust the
+// result before touching state.json.
 async function verifyStaffToken(accessToken) {
   if (!isConfigured() || !accessToken) return null;
   try {
@@ -118,6 +118,41 @@ async function verifyStaffToken(accessToken) {
   }
 }
 
+// Exchanges an email + password for a Supabase session, server-side.
+//
+// The browser used to do this itself via signInWithPassword(), which meant it
+// first had to know the staff member's email address — and the only way it
+// had to turn a typed username into one was to search the publicly-served
+// barberAccounts list. Running the exchange here is what allows that list to
+// stop carrying emails, phones and face descriptors altogether.
+//
+// Uses the publishable key, exactly as the browser SDK would; a password
+// grant never involves the secret key. Returns null on any failure so the
+// caller can answer with one generic message rather than distinguishing
+// "no such user" from "wrong password".
+async function signInStaff(email, password) {
+  if (!isConfigured() || !email || !password) return null;
+  try {
+    const resp = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
+      method: 'POST',
+      headers: { apikey: SUPABASE_PUBLISHABLE_KEY, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    if (!json || !json.access_token) return null;
+    return {
+      access_token: json.access_token,
+      refresh_token: json.refresh_token,
+      expires_in: json.expires_in,
+      token_type: json.token_type || 'bearer',
+    };
+  } catch (err) {
+    console.error('[supabaseAdmin] staff sign-in failed:', err.message);
+    return null;
+  }
+}
+
 module.exports = {
   isConfigured,
   publicConfig,
@@ -125,4 +160,5 @@ module.exports = {
   updateStaffPassword,
   deleteStaffAuthUser,
   verifyStaffToken,
+  signInStaff,
 };
