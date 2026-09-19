@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -29,6 +29,13 @@
     --ios-ease-out: cubic-bezier(0.32, 0.72, 0, 1);
     --ios-tap: cubic-bezier(0.25, 0.1, 0.25, 1);
 
+    --radius: 16px;
+  }
+
+  /* Dark and light palettes are index.html's, value for value, so the two
+     surfaces stay identical as either is tweaked. Painted onto
+     <html data-theme> by applyResolvedTheme() below. */
+  :root[data-theme="dark"] {
     --bg-main: #060608;
     --text-main: #ffffff;
     --text-muted: #e4e4eb;
@@ -43,6 +50,33 @@
     --glass-shadow-hover: 0 18px 46px rgba(0, 0, 0, 0.6), inset 0 1.5px 1.5px rgba(255, 255, 255, 0.45), inset 0 -16px 30px -16px rgba(255, 255, 255, 0.3);
     --glass-blur: blur(28px) saturate(190%);
     --input-bg: rgba(255, 255, 255, 0.1);
+    --wash-1: rgba(0, 113, 227, 0.16);
+    --wash-2: rgba(66, 165, 245, 0.10);
+    --wash-3: rgba(0, 113, 227, 0.08);
+  }
+
+  :root[data-theme="light"] {
+    --bg-main: #f0f0f5;
+    --text-main: #1c1c1e;
+    --text-muted: #2c2c2e;
+    --text-sub: #48484a;
+
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-bg-hover: rgba(255, 255, 255, 0.5);
+    --glass-bg-strong: rgba(255, 255, 255, 0.92);
+    --glass-border: rgba(0, 0, 0, 0.14);
+    --glass-border-hover: rgba(0, 0, 0, 0.28);
+    --glass-shadow: 0 10px 32px rgba(0, 0, 0, 0.1), inset 0 1.5px 2px rgba(255, 255, 255, 1);
+    --glass-shadow-hover: 0 20px 50px rgba(0, 0, 0, 0.16), inset 0 1.5px 2px rgba(255, 255, 255, 1);
+    --glass-blur: blur(40px) saturate(230%);
+    --input-bg: rgba(0, 0, 0, 0.06);
+    --wash-1: rgba(0, 113, 227, 0.10);
+    --wash-2: rgba(66, 165, 245, 0.08);
+    --wash-3: rgba(0, 113, 227, 0.05);
+  }
+
+  /* Aliases resolve per-theme because they point at the tokens above. */
+  :root {
 
     /* Back-compat aliases — every pre-existing rule keeps working. */
     --bg: var(--bg-main);
@@ -54,7 +88,6 @@
     --brass-light: var(--accent-light);
     --good: #10b981;
     --bad: #ff453a;
-    --radius: 16px;
   }
   * { box-sizing: border-box; }
   html, body {
@@ -68,16 +101,17 @@
      page sits on the same layered wash the customer site uses. */
   body {
     background:
-      radial-gradient(1100px 700px at 12% -8%, rgba(0, 113, 227, 0.16), transparent 62%),
-      radial-gradient(900px 600px at 92% 4%, rgba(66, 165, 245, 0.10), transparent 58%),
-      radial-gradient(800px 800px at 50% 112%, rgba(0, 113, 227, 0.08), transparent 60%),
+      radial-gradient(1100px 700px at 12% -8%, var(--wash-1), transparent 62%),
+      radial-gradient(900px 600px at 92% 4%, var(--wash-2), transparent 58%),
+      radial-gradient(800px 800px at 50% 112%, var(--wash-3), transparent 60%),
       var(--bg-main);
     background-attachment: fixed;
+    transition: background-color 0.5s ease, color 0.5s ease;
   }
   h1, h2, h3, .display { font-family: 'Fraunces', serif; font-weight: 500; letter-spacing: 0.01em; }
   button { font-family: inherit; }
   a { color: var(--brass-light); }
-  ::selection { background: var(--brass); color: #14161a; }
+  ::selection { background: var(--accent); color: #fff; }
 
   /* ---------- Login screen ---------- */
   #loginScreen {
@@ -98,13 +132,13 @@
   .field { margin-bottom: 16px; }
   .field label { display: block; font-size: 0.72rem; color: var(--text-sub); margin-bottom: 6px; }
   .field input, .field select {
-    width: 100%; background: #14161a; border: 1px solid var(--line); color: var(--text);
+    width: 100%; background: var(--input-bg); border: 1px solid var(--line); color: var(--text);
     border-radius: 8px; padding: 10px 12px; font-size: 0.88rem; font-family: inherit;
   }
   .field input:focus, .field select:focus { outline: none; border-color: var(--brass); }
   .btn {
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-    background: var(--brass); color: #17130a; border: none; border-radius: 8px;
+    background: var(--brass); color: #fff; border: none; border-radius: 8px;
     padding: 11px 18px; font-size: 0.86rem; font-weight: 600; cursor: pointer;
     width: 100%; transition: background 0.15s ease;
   }
@@ -123,7 +157,7 @@
 
   .face-frame {
     position: relative; width: 220px; aspect-ratio: 1/1; margin: 4px auto 16px;
-    border-radius: 50%; overflow: hidden; background: #0f1114; border: 1px solid var(--line);
+    border-radius: 50%; overflow: hidden; background: var(--input-bg); border: 1px solid var(--line);
   }
   .face-frame video { width: 100%; height: 100%; object-fit: cover; display: none; }
   .face-frame .idle { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-sub); font-size: 0.72rem; text-align: center; padding: 10px; }
@@ -147,7 +181,7 @@
   .nav-item:hover { color: var(--text); background: rgba(255,255,255,0.03); }
   .nav-item.active { color: var(--text); background: var(--panel-raised); border-left: 2px solid var(--brass); padding-left: 10px; }
   .nav-item .badge {
-    margin-left: auto; background: var(--brass); color: #17130a; font-size: 0.65rem; font-weight: 700;
+    margin-left: auto; background: var(--brass); color: #fff; font-size: 0.65rem; font-weight: 700;
     border-radius: 10px; padding: 1px 6px;
   }
   .sidebar-foot { margin-top: auto; padding-top: 14px; border-top: 1px solid var(--line); }
@@ -185,7 +219,7 @@
   .small-btn:hover { border-color: var(--brass); color: var(--brass-light); }
   .small-btn.danger:hover { border-color: var(--bad); color: #e07a63; }
   select.inline-select {
-    background: #14161a; border: 1px solid var(--line); color: var(--text); border-radius: 6px;
+    background: var(--input-bg); border: 1px solid var(--line); color: var(--text); border-radius: 6px;
     padding: 5px 8px; font-size: 0.74rem; font-family: inherit;
   }
   .empty-note { color: var(--text-sub); font-size: 0.82rem; padding: 18px 4px; }
@@ -194,7 +228,7 @@
   .settings-block h3 { margin: 0 0 4px; font-size: 1rem; }
   .settings-block .hint { color: var(--text-sub); font-size: 0.76rem; margin: 0 0 16px; line-height: 1.5; }
 
-  code { background: #0f1114; padding: 1px 5px; border-radius: 4px; font-size: 0.78rem; }
+  code { background: var(--input-bg); padding: 1px 5px; border-radius: 4px; font-size: 0.78rem; }
   .toast {
     position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
     background: var(--panel-raised); border: 1px solid var(--line); color: var(--text);
@@ -233,7 +267,7 @@
   .logo-preview.round { border-radius: 50%; background: var(--panel-raised); }
   .logo-preview img { width: 100%; height: 100%; object-fit: contain; }
   .logo-preview.round img { object-fit: cover; }
-  .logo-preview span { font-size: 0.55rem; color: #8a8a8a; text-align: center; padding: 2px; }
+  .logo-preview span { font-size: 0.55rem; color: var(--text-sub); text-align: center; padding: 2px; }
   .upload-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
   .subsection {
@@ -259,7 +293,7 @@
   }
   .gallery-row img { width: 60px; height: 60px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: var(--panel); }
   .gallery-row .gallery-fields { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
-  .gallery-row input { width: 100%; background: #14161a; border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 7px 9px; font-size: 0.8rem; font-family: inherit; }
+  .gallery-row input { width: 100%; background: var(--input-bg); border: 1px solid var(--line); color: var(--text); border-radius: 6px; padding: 7px 9px; font-size: 0.8rem; font-family: inherit; }
   .gallery-row .remove-x { background: transparent; border: none; color: var(--bad); font-size: 1.05rem; cursor: pointer; padding: 4px; flex-shrink: 0; }
   textarea.mono { font-family: 'SF Mono', Consolas, monospace; font-size: 0.8rem; }
 
@@ -441,6 +475,109 @@
       transition: none !important; transform: none !important;
     }
   }
+
+  /* =====================================================================
+     Icons, appearance control, and motion
+     ===================================================================== */
+
+  .nav-item { gap: 10px; }
+  .nav-ico {
+    width: 17px; height: 17px; flex-shrink: 0;
+    opacity: 0.75;
+    transition: opacity 0.25s ease, transform 0.45s var(--ios-spring);
+  }
+  .nav-item:hover .nav-ico { opacity: 1; transform: scale(1.12); }
+  .nav-item.active .nav-ico { opacity: 1; }
+  .nav-label { flex: 1; min-width: 0; }
+
+  /* Appearance segmented control — same geometry and behaviour as the one
+     in index.html's header, so the two feel like one control. */
+  .theme-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; margin-bottom: 12px; padding: 0 2px;
+  }
+  .theme-row-label {
+    font-size: 0.7rem; font-weight: 700; color: var(--text-sub);
+    text-transform: uppercase; letter-spacing: 0.06em;
+  }
+  .theme-segmented {
+    display: flex; align-items: center; gap: 2px; padding: 3px;
+    border-radius: 999px; background: var(--input-bg);
+    border: 1px solid var(--glass-border);
+  }
+  .theme-segment-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; padding: 0;
+    border-radius: 50%; border: none; background: transparent;
+    color: var(--text-sub); cursor: pointer;
+    transition: background 0.3s ease, color 0.3s ease,
+                transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  }
+  .theme-segment-btn svg { width: 15px; height: 15px; flex-shrink: 0; }
+  .theme-segment-btn:hover { color: var(--text-main); transform: scale(1.1); }
+  .theme-segment-btn:active { transform: scale(0.92); }
+  .theme-segment-btn.is-active { background: var(--accent); color: #fff; }
+
+  /* ---------------------------------------------------------------------
+     Tab transitions
+     ---------------------------------------------------------------------
+     Pages were swapped with a bare display toggle, which reads as a hard
+     cut. Each page now fades and lifts in, and its direct children stagger
+     behind it so the content assembles rather than appearing all at once.
+     Driven by a class goToPage() re-applies, so it replays on every switch.
+     --------------------------------------------------------------------- */
+  @keyframes pageIn {
+    from { opacity: 0; transform: translateY(10px) scale(0.994); }
+    to   { opacity: 1; transform: none; }
+  }
+  @keyframes rowIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: none; }
+  }
+  .page.is-entering { animation: pageIn 0.42s var(--ios-ease-out) both; }
+  .page.is-entering > * { animation: rowIn 0.44s var(--ios-ease-out) both; }
+  .page.is-entering > *:nth-child(1) { animation-delay: 0.02s; }
+  .page.is-entering > *:nth-child(2) { animation-delay: 0.06s; }
+  .page.is-entering > *:nth-child(3) { animation-delay: 0.10s; }
+  .page.is-entering > *:nth-child(4) { animation-delay: 0.14s; }
+  .page.is-entering > *:nth-child(5) { animation-delay: 0.18s; }
+  .page.is-entering > *:nth-child(6) { animation-delay: 0.22s; }
+  .page.is-entering > *:nth-child(n+7) { animation-delay: 0.26s; }
+
+  /* Stat tiles and ledger rows cascade when their list re-renders. */
+  .stat-row .stat { animation: rowIn 0.5s var(--ios-ease-out) both; }
+  .stat-row .stat:nth-child(1) { animation-delay: 0.04s; }
+  .stat-row .stat:nth-child(2) { animation-delay: 0.09s; }
+  .stat-row .stat:nth-child(3) { animation-delay: 0.14s; }
+  .stat-row .stat:nth-child(4) { animation-delay: 0.19s; }
+
+  /* The active nav pill glides between items instead of snapping. */
+  .nav-item.active { position: relative; }
+  .nav-item.active::before {
+    content: ''; position: absolute; left: -14px; top: 50%;
+    width: 3px; height: 0; border-radius: 0 3px 3px 0;
+    background: var(--accent-light); transform: translateY(-50%);
+    animation: navMark 0.45s var(--ios-spring) forwards;
+  }
+  @keyframes navMark { to { height: 60%; } }
+
+  /* Toast slide-in. */
+  @keyframes toastIn {
+    from { opacity: 0; transform: translateY(14px) scale(0.96); }
+    to   { opacity: 1; transform: none; }
+  }
+  .toast { animation: toastIn 0.4s var(--ios-spring) both; }
+
+  /* Sub-tab underline + panel fade. */
+  .subpage { animation: pageIn 0.34s var(--ios-ease-out) both; }
+
+  /* Everything above is decorative; honour the OS setting. */
+  @media (prefers-reduced-motion: reduce) {
+    .page.is-entering, .page.is-entering > *, .stat-row .stat,
+    .toast, .subpage, .nav-item.active::before {
+      animation: none !important;
+    }
+  }
 </style>
 </head>
 <body>
@@ -487,19 +624,33 @@
 <div id="appShell">
   <div class="sidebar">
     <div class="brand"><span class="dot"></span><span class="brand-name" id="sidebarBrand">Owner Console</span></div>
-    <button class="nav-item active" data-page="overview" onclick="goToPage('overview')">Overview</button>
-    <button class="nav-item" data-page="approvals" onclick="goToPage('approvals')">Approvals<span class="badge" id="navApprovalsBadge" style="display:none;"></span></button>
-    <button class="nav-item" data-page="team" onclick="goToPage('team')">Team &amp; Roles</button>
-    <button class="nav-item" data-page="calls" onclick="goToPage('calls')">Live Calls</button>
-    <button class="nav-item" data-page="members" onclick="goToPage('members')">Memberships</button>
-    <button class="nav-item" data-page="reviews" onclick="goToPage('reviews')">Reviews</button>
-    <button class="nav-item" data-page="branding" onclick="goToPage('branding')">Branding &amp; Contact</button>
-    <button class="nav-item" data-page="content" onclick="goToPage('content')">Services &amp; Content</button>
-    <button class="nav-item" data-page="payments" onclick="goToPage('payments')">Booking &amp; Payments</button>
-    <button class="nav-item" data-page="integrations" onclick="goToPage('integrations')">Integrations</button>
-    <button class="nav-item" data-page="security" onclick="goToPage('security')">Security</button>
-    <button class="nav-item" data-page="settings" onclick="goToPage('settings')">Hours</button>
+    <button class="nav-item active" data-page="overview" onclick="goToPage('overview')"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13h8V3H3zM13 21h8V11h-8zM13 3v6h8V3zM3 21h8v-6H3z"/></svg><span class="nav-label">Overview</span></button>
+    <button class="nav-item" data-page="approvals" onclick="goToPage('approvals')"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span class="nav-label">Approvals<span class="badge" id="navApprovalsBadge" style="display:none;"></span></span></button>
+    <button class="nav-item" data-page="team" onclick="goToPage('team')"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="nav-label">Team &amp; Roles</span></button>
+    <button class="nav-item" data-page="calls" onclick="goToPage('calls')"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg><span class="nav-label">Live Calls</span></button>
+    <button class="nav-item" data-page="members" onclick="goToPage('members')"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg><span class="nav-label">Memberships</span></button>
+    <button class="nav-item" data-page="reviews" onclick="goToPage('reviews')"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01z"/></svg><span class="nav-label">Reviews</span></button>
+    <button class="nav-item" data-page="branding" onclick="goToPage('branding')"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg><span class="nav-label">Branding &amp; Contact</span></button>
+    <button class="nav-item" data-page="content" onclick="goToPage('content')"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg><span class="nav-label">Services &amp; Content</span></button>
+    <button class="nav-item" data-page="payments" onclick="goToPage('payments')"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg><span class="nav-label">Booking &amp; Payments</span></button>
+    <button class="nav-item" data-page="integrations" onclick="goToPage('integrations')"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span class="nav-label">Integrations</span></button>
+    <button class="nav-item" data-page="security" onclick="goToPage('security')"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg><span class="nav-label">Security</span></button>
+    <button class="nav-item" data-page="settings" onclick="goToPage('settings')"><svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span class="nav-label">Hours</span></button>
     <div class="sidebar-foot">
+      <div class="theme-row">
+        <span class="theme-row-label">Appearance</span>
+        <div class="theme-segmented" role="radiogroup" aria-label="Appearance">
+          <button type="button" class="theme-segment-btn" data-theme-choice="light" onclick="setThemePreference('light')" role="radio" aria-checked="false" title="Light" aria-label="Light">
+            <svg viewBox="0 0 24 24" style="fill:none;" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          </button>
+          <button type="button" class="theme-segment-btn" data-theme-choice="dark" onclick="setThemePreference('dark')" role="radio" aria-checked="false" title="Dark" aria-label="Dark">
+            <svg viewBox="0 0 24 24" style="fill:none;" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          </button>
+          <button type="button" class="theme-segment-btn" data-theme-choice="system" onclick="setThemePreference('system')" role="radio" aria-checked="false" title="System" aria-label="System">
+            <svg viewBox="0 0 24 24" style="fill:none;" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          </button>
+        </div>
+      </div>
       <button class="small-btn" style="width:100%;" onclick="ownerLogout()">Log out</button>
     </div>
   </div>
@@ -682,10 +833,10 @@
           </div>
           <label class="switch"><input type="checkbox" id="brIntroEnabled"><span class="switch-track"></span></label>
         </div>
-        <div class="field" style="margin-top:10px;"><label>Entrance tagline</label><textarea id="brIntroTagline" rows="2" style="width:100%; background:#14161a; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.82rem; font-family:inherit; resize:vertical;"></textarea></div>
+        <div class="field" style="margin-top:10px;"><label>Entrance tagline</label><textarea id="brIntroTagline" rows="2" style="width:100%; background:var(--input-bg); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.82rem; font-family:inherit; resize:vertical;"></textarea></div>
         <div class="field"><label>Hero title</label><input type="text" id="brHeroTitle"></div>
-        <div class="field"><label>Hero subtitle</label><textarea id="brHeroSub" rows="2" style="width:100%; background:#14161a; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.82rem; font-family:inherit; resize:vertical;"></textarea></div>
-        <div class="field"><label>Footer description</label><textarea id="brFooterDesc" rows="2" style="width:100%; background:#14161a; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.82rem; font-family:inherit; resize:vertical;"></textarea></div>
+        <div class="field"><label>Hero subtitle</label><textarea id="brHeroSub" rows="2" style="width:100%; background:var(--input-bg); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.82rem; font-family:inherit; resize:vertical;"></textarea></div>
+        <div class="field"><label>Footer description</label><textarea id="brFooterDesc" rows="2" style="width:100%; background:var(--input-bg); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.82rem; font-family:inherit; resize:vertical;"></textarea></div>
         <div class="field-row">
           <div class="field"><label>Owner name</label><input type="text" id="brOwnerName"></div>
           <div class="field"><label>Copyright text (after year)</label><input type="text" id="brCopyrightText"></div>
@@ -722,7 +873,7 @@
       <div class="subsection">
         <h4>Services (JSON)</h4>
         <p class="hint">Each entry needs <code>name</code>, <code>price</code>, and <code>desc</code>.</p>
-        <textarea id="ctServices" rows="8" class="mono" style="width:100%; background:#14161a; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; resize:vertical;"></textarea>
+        <textarea id="ctServices" rows="8" class="mono" style="width:100%; background:var(--input-bg); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; resize:vertical;"></textarea>
       </div>
 
       <div class="subsection">
@@ -896,7 +1047,7 @@
 
       <div class="subsection">
         <h4>Chat Widget</h4>
-        <div class="field"><label>Chat welcome message</label><textarea id="intChatWelcome" rows="2" style="width:100%; background:#14161a; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.82rem; font-family:inherit; resize:vertical;"></textarea></div>
+        <div class="field"><label>Chat welcome message</label><textarea id="intChatWelcome" rows="2" style="width:100%; background:var(--input-bg); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.82rem; font-family:inherit; resize:vertical;"></textarea></div>
         <div class="toggle-row" style="border-bottom:none; padding-bottom:0;">
           <div>
             <div class="toggle-label">Use Advanced AI (GPT + Claude + Gemini)</div>
@@ -938,12 +1089,12 @@
     <div class="field"><label>Phone</label><input type="text" id="ecPhone"></div>
     <div class="field">
       <label>Role</label>
-      <select id="ecRole" onchange="onEditContactRoleChange()" style="width:100%; background:#14161a; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.85rem;">
+      <select id="ecRole" onchange="onEditContactRoleChange()" style="width:100%; background:var(--input-bg); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.85rem;">
         <option value="barber">Barber</option>
         <option value="staff">Staff</option>
       </select>
     </div>
-    <div class="field" id="ecPositionField"><label>Position</label><select id="ecPosition" style="width:100%; background:#14161a; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.85rem;"></select></div>
+    <div class="field" id="ecPositionField"><label>Position</label><select id="ecPosition" style="width:100%; background:var(--input-bg); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.85rem;"></select></div>
     <div class="error-msg" id="ecErr" style="display:none; color:var(--bad); font-size:0.78rem; margin-bottom:8px;"></div>
     <div class="btn-row" style="display:flex; gap:8px; margin-top:6px;">
       <button class="btn btn-outline" style="flex:1;" onclick="closeEditContact()">Cancel</button>
@@ -1233,8 +1384,64 @@
 
   // ---------------- Navigation ----------------
   function goToPage(name) {
-    document.querySelectorAll('.page').forEach(p => p.style.display = p.dataset.page === name ? 'block' : 'none');
+    document.querySelectorAll('.page').forEach(p => {
+      const show = p.dataset.page === name;
+      p.style.display = show ? 'block' : 'none';
+      // Removing the class and forcing a reflow before re-adding it is what
+      // makes the animation replay. Without the reflow the browser coalesces
+      // remove+add into no change at all, and the page only ever animates
+      // the first time it is shown.
+      p.classList.remove('is-entering');
+      if (show) { void p.offsetWidth; p.classList.add('is-entering'); }
+    });
     document.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.page === name));
+  }
+
+  // ---------------- Appearance: light / dark / system ----------------
+  // Same behaviour and the same storage key as index.html, so whichever
+  // surface someone sets it on, the other follows.
+  const ownerHtmlEl = document.documentElement;
+  const OWNER_THEME_KEY = 'primus_theme'; // 'light' | 'dark'; absent means system
+
+  function systemPrefersDark() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }
+
+  function getThemePreference() {
+    return localStorage.getItem(OWNER_THEME_KEY) || 'system';
+  }
+
+  function applyResolvedTheme() {
+    const pref = getThemePreference();
+    const resolved = pref === 'system' ? (systemPrefersDark() ? 'dark' : 'light') : pref;
+    ownerHtmlEl.setAttribute('data-theme', resolved);
+    updateThemeSegmentedUI(pref);
+  }
+
+  // Highlights the chosen preference, not the resolved value — so "System"
+  // stays lit even while it currently resolves to Dark.
+  function updateThemeSegmentedUI(pref) {
+    pref = pref || getThemePreference();
+    document.querySelectorAll('.theme-segment-btn').forEach(btn => {
+      const active = btn.dataset.themeChoice === pref;
+      btn.classList.toggle('is-active', active);
+      btn.setAttribute('aria-checked', String(active));
+    });
+  }
+
+  function setThemePreference(pref) {
+    if (pref === 'system') localStorage.removeItem(OWNER_THEME_KEY);
+    else localStorage.setItem(OWNER_THEME_KEY, pref);
+    applyResolvedTheme();
+  }
+
+  applyResolvedTheme();
+
+  // Keep following the OS while the preference is System.
+  if (window.matchMedia) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      if (getThemePreference() === 'system') applyResolvedTheme();
+    });
   }
 
   // ---------------- Rendering ----------------
@@ -1866,8 +2073,8 @@
     const rows = document.getElementById('hoursRows');
     const div = document.createElement('div');
     div.style.cssText = 'display:flex; gap:8px; margin-bottom:8px;';
-    div.innerHTML = `<input type="text" class="hours-day" placeholder="e.g. Monday – Friday" value="${escapeHtml(day || '')}" style="flex:1; background:#14161a; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.82rem;">
-      <input type="text" class="hours-time" placeholder="e.g. 09:00 AM – 08:00 PM" value="${escapeHtml(time || '')}" style="flex:1; background:#14161a; border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.82rem;">
+    div.innerHTML = `<input type="text" class="hours-day" placeholder="e.g. Monday – Friday" value="${escapeHtml(day || '')}" style="flex:1; background:var(--input-bg); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.82rem;">
+      <input type="text" class="hours-time" placeholder="e.g. 09:00 AM – 08:00 PM" value="${escapeHtml(time || '')}" style="flex:1; background:var(--input-bg); border:1px solid var(--line); color:var(--text); border-radius:8px; padding:8px 10px; font-size:0.82rem;">
       <button class="small-btn danger" onclick="this.parentElement.remove()">✕</button>`;
     rows.appendChild(div);
   }

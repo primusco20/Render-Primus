@@ -89,6 +89,7 @@ const crypto = require('crypto');
 const mailer = require('./mailer'); // Resend-backed transactional email (see mailer.js)
 const supabaseAdmin = require('./supabaseAdmin'); // Supabase Auth for staff accounts (see supabaseAdmin.js)
 const stateStore = require('./stateStore');       // durable state storage (see stateStore.js)
+const otp = require('./otp');                     // email one-time codes (see otp.js)
 
 const app = express();
 // Render sits behind exactly one proxy. `true` would trust the whole
@@ -449,6 +450,10 @@ function buildPublicState(state) {
   const publicState = { ...state };
   delete publicState.adminPassword;
   delete publicState._payments;
+  // Pending one-time codes live in the same blob. They're stored hashed, but
+  // the table also reveals which addresses are mid-login and how many attempts
+  // remain — none of which belongs in an unauthenticated response.
+  delete publicState[otp.STORE_KEY];
 
   publicState.memberStatuses = Object.fromEntries(
     Object.entries(state.members || {}).map(([num, m]) => [num, { active: m.active !== false }])
@@ -818,6 +823,146 @@ function validateStaffSelfEdit(body) {
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// One-time codes (second factor for privileged logins)
+// ---------------------------------------------------------------------------
+// These replace the browser-side Face ID check as the real second factor. That
+// check ran in the visitor's own JavaScript against a descriptor the page had
+// downloaded, so it could be skipped from devtools. A code mailed to an inbox
+// the server chooses cannot be.
+//
+// The request endpoint ALWAYS answers { ok: true }. Reporting "no such user"
+// would turn it into a directory of who works here, and reporting throttling
+// separately would leak which addresses are real. Failures are logged
+// server-side instead.
+
+const otpLimiter = rateLimit({ windowMs: 10 * 60 * 1000, max: 10 });
+
+// b****@example.com — enough for the right person to recognise their own
+// address, not enough to hand an attacker one they didn't already have.
+function maskEmail(email) {
+  const [user, domain] = String(email || '').split('@');
+  if (!user || !domain) return '';
+  const head = user.slice(0, 1);
+  return `${head}${'*'.repeat(Math.max(3, user.length - 1))}@${domain}`;
+}
+
+function businessName(state) {
+  return state.businessName || 'Primus Barbershop';
+}
+
+// Resolves who a login identifier belongs to, without telling the caller.
+function resolveOtpTarget(state, purpose, identifier) {
+  const id = String(identifier || '').trim().toLowerCase();
+  if (!id) return null;
+
+  if (purpose === 'owner_login') {
+    if (OWNER_EMAILS.includes(id)) return { email: id };
+    return null;
+  }
+  if (purpose === 'staff_login') {
+    const acct = (state.barberAccounts || []).find(
+      a => (a.username || '').toLowerCase() === id || (a.email || '').toLowerCase() === id
+    );
+    if (acct && acct.email && acct.approved !== false && acct.active !== false) {
+      return { email: acct.email, accountId: acct.id };
+    }
+    return null;
+  }
+  if (purpose === 'member_lookup') {
+    const entry = Object.entries(state.members || {})
+      .find(([, m]) => (m.email || '').toLowerCase() === id && m.active !== false);
+    if (entry) return { email: entry[1].email, membershipNumber: entry[0] };
+    return null;
+  }
+  return null;
+}
+
+const OTP_LABELS = {
+  owner_login: 'sign in to the Owner Console',
+  staff_login: 'sign in to your staff account',
+  member_lookup: 'look up your membership',
+  owner_bootstrap: 'set the Owner Console password',
+};
+
+app.post('/api/auth/otp/request', checkOrigin, otpLimiter, async (req, res) => {
+  const purpose = String(req.body?.purpose || '');
+  const identifier = String(req.body?.identifier || '').trim();
+  if (!OTP_LABELS[purpose] || !identifier) {
+    return res.status(400).json({ error: 'Missing purpose or identifier.' });
+  }
+
+  const state = readState();
+  const target = resolveOtpTarget(state, purpose === 'owner_bootstrap' ? 'owner_login' : purpose, identifier);
+
+  // Uniform response regardless of whether the target exists.
+  if (!target) {
+    console.warn(`[otp] request for unknown ${purpose} identifier — answering ok anyway`);
+    return res.json({ ok: true });
+  }
+
+  const result = await otp.requestCode({
+    state, purpose, identifier,
+    email: target.email,
+    businessName: businessName(state),
+    purposeLabel: OTP_LABELS[purpose],
+  });
+  if (result.ok) writeState(state);
+  else console.warn(`[otp] ${purpose} not sent (${result.reason})`);
+
+  res.json({ ok: true });
+});
+
+// ---------------------------------------------------------------------------
+// Owner bootstrap — first-time password setup for an OWNER_EMAILS address
+// ---------------------------------------------------------------------------
+// scripts/create-owner.js needs a shell, which Render's free plan doesn't
+// provide, so there was no way to create the owner's Supabase login at all.
+// This does it over HTTP, gated three ways: the address must already be listed
+// in OWNER_EMAILS (so nobody can self-declare), a code must be received at that
+// address, and it only works while no Supabase user exists for it yet.
+app.post('/api/owner/bootstrap', checkOrigin, otpLimiter, async (req, res) => {
+  if (!supabaseAdmin.isConfigured()) {
+    return res.status(503).json({ error: 'Supabase is not set up on this server yet.' });
+  }
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const code = String(req.body?.code || '').trim();
+  const password = String(req.body?.password || '');
+
+  if (!OWNER_EMAILS.includes(email)) {
+    return res.status(403).json({ error: 'That address is not configured as an owner.' });
+  }
+  if (password.length < 10) {
+    return res.status(400).json({ error: 'Choose a password of at least 10 characters.' });
+  }
+
+  const state = readState();
+  const check = otp.verifyCode({ state, purpose: 'owner_bootstrap', identifier: email, code });
+  writeState(state); // persist the attempt counter either way
+  if (!check.ok) {
+    const msg = check.reason === 'expired' ? 'That code has expired — request a new one.'
+      : check.reason === 'too_many_attempts' ? 'Too many incorrect codes. Request a new one.'
+      : 'That code is not correct.';
+    return res.status(401).json({ error: msg });
+  }
+
+  try {
+    const user = await supabaseAdmin.createStaffAuthUser({ email, password });
+    console.log(`[owner] bootstrap created Supabase login for ${email} (${user.id})`);
+    return res.json({ ok: true, email });
+  } catch (err) {
+    // Already registered: don't let this be used to reset an existing owner's
+    // password — that would make the mailbox a full account takeover path.
+    if (err.status === 422 || /already/i.test(err.message || '')) {
+      return res.status(409).json({
+        error: 'This owner login already exists. Use "Forgot password" in Supabase, or sign in normally.',
+      });
+    }
+    console.error('[owner] bootstrap failed:', err.message);
+    return res.status(500).json({ error: 'Could not create the owner login. Please try again.' });
+  }
+});
+
 // A staff member reading their OWN record. The public /api/state no longer
 // carries email, phone, username or faceDescriptor for anyone, so this is how
 // a logged-in staff member gets their own profile after signing in.
@@ -862,6 +1007,40 @@ app.post('/api/staff/signin', checkOrigin, paymentLimiter, async (req, res) => {
 
   const session = await supabaseAdmin.signInStaff(acct.email, password);
   if (!session) return res.status(401).json(generic);
+
+  // Second factor. Checked AFTER the password so a wrong password and a
+  // missing code are indistinguishable from outside — otherwise this endpoint
+  // would confirm valid passwords to anyone spraying them.
+  //
+  // Staff with no email on file can't receive a code. Rather than lock them
+  // out, they fall through to password-only and the response says so, so an
+  // admin can see who still needs an address.
+  if (acct.email) {
+    const code = String(req.body?.code || '').trim();
+    if (!code) {
+      const state2 = readState();
+      const sent = await otp.requestCode({
+        state: state2, purpose: 'staff_login', identifier: username,
+        email: acct.email, businessName: businessName(state2),
+        purposeLabel: OTP_LABELS.staff_login,
+      });
+      if (sent.ok) writeState(state2);
+      // 'otp_required' is not an error the caller should treat as failure —
+      // it means "now ask for the code and post it back".
+      return res.status(200).json({ otpRequired: true, sentTo: maskEmail(acct.email) });
+    }
+    const state3 = readState();
+    const check = otp.verifyCode({ state: state3, purpose: 'staff_login', identifier: username, code });
+    writeState(state3);
+    if (!check.ok) {
+      return res.status(401).json({
+        error: check.reason === 'expired' ? 'That code has expired — sign in again to get a new one.'
+          : check.reason === 'too_many_attempts' ? 'Too many incorrect codes. Sign in again for a new one.'
+          : 'That code is not correct.',
+        otpRequired: true,
+      });
+    }
+  }
 
   // Approval is checked after the password, so an unapproved account can't be
   // identified without knowing its password either.
@@ -1456,7 +1635,53 @@ function toGeminiHistory(history) {
 
 app.get('/healthz', (req, res) => res.send('ok'));
 
-app.use(express.static(__dirname, { extensions: ['html'] }));
+// express.static(__dirname) served the ENTIRE repository root. That made
+// GET /data/state.json a public download of the raw state file — every
+// member's name, email and phone, every booking, every staff face
+// descriptor, and adminPassword — which quietly defeated all of the
+// projection work on /api/state. It also served server.js, stateStore.js and
+// supabaseAdmin.js as plain text.
+//
+// Static serving is now an explicit allowlist. Anything not named here is a
+// 404, so adding a file to the repo can never silently publish it; new public
+// assets have to be added below on purpose. Browser-facing code only.
+const PUBLIC_FILES = new Set([
+  '/index.html',
+  '/owner.html',
+  '/chat.js',
+  '/barber.html',
+  '/admin.html',
+  '/support.html',
+  '/member.html',
+  '/favicon.ico',
+  '/robots.txt',
+]);
+
+// Static assets (images, fonts) may live under /assets — never anywhere that
+// could hold server code or data.
+const PUBLIC_ASSET_PREFIX = '/assets/';
+const PUBLIC_ASSET_EXTENSIONS = /\.(png|jpe?g|gif|webp|svg|ico|woff2?|ttf|otf|mp4|webm|css)$/i;
+
+app.use((req, res, next) => {
+  // Only GET/HEAD reach static serving at all.
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+
+  // decodeURIComponent so %2e%2e style traversal can't slip past the checks.
+  let pathname;
+  try { pathname = decodeURIComponent(req.path); } catch (e) { return res.status(400).end(); }
+  if (pathname.includes('\0') || pathname.includes('..')) return res.status(404).end();
+
+  if (pathname === '/' || pathname === '/owner') return next(); // handled below
+  if (PUBLIC_FILES.has(pathname)) return next();
+  if (pathname.startsWith(PUBLIC_ASSET_PREFIX) && PUBLIC_ASSET_EXTENSIONS.test(pathname)) return next();
+
+  // Extensionless convenience routes (/barber -> barber.html), same allowlist.
+  if (PUBLIC_FILES.has(pathname + '.html')) { req.url = pathname + '.html'; return next(); }
+
+  return res.status(404).send('Not found');
+});
+
+app.use(express.static(__dirname, { extensions: ['html'], dotfiles: 'deny', index: false }));
 
 app.get('/owner', (req, res) => res.sendFile(path.join(__dirname, 'owner.html')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'index.html')));
