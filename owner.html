@@ -551,6 +551,13 @@
           </div>
           <label class="switch"><input type="checkbox" id="payPaymongoEnabled"><span class="switch-track"></span></label>
         </div>
+        <div class="toggle-row" style="border-bottom:none; padding-bottom:0; margin-top:14px;">
+          <div>
+            <div class="toggle-label">Live checkout (Xendit)</div>
+            <div class="toggle-hint" id="payXenditHint">Alternative gateway to PayMongo. Requires an Xendit secret key set on the server (never entered here).</div>
+          </div>
+          <label class="switch"><input type="checkbox" id="payXenditEnabled"><span class="switch-track"></span></label>
+        </div>
       </div>
 
       <div class="subsection">
@@ -1768,6 +1775,11 @@
       document.getElementById('payPaymongoEnabled').disabled = true;
       document.getElementById('payPaymongoHint').textContent = 'The server has no PayMongo secret key configured, so this stays off no matter what you pick here.';
     }
+    document.getElementById('payXenditEnabled').checked = !!merchant.xenditEnabled;
+    if (appSettings.xenditAvailable === false) {
+      document.getElementById('payXenditEnabled').disabled = true;
+      document.getElementById('payXenditHint').textContent = 'The server has no Xendit secret key configured, so this stays off no matter what you pick here.';
+    }
 
     ['gcash', 'maya', 'gotyme', 'maribank'].forEach(method => {
       const m = merchant[method] || {};
@@ -1796,6 +1808,7 @@
 
     if (!appSettings.merchant) appSettings.merchant = {};
     appSettings.merchant.paymongoEnabled = document.getElementById('payPaymongoEnabled').checked;
+    appSettings.merchant.xenditEnabled = document.getElementById('payXenditEnabled').checked;
     ['gcash', 'maya', 'gotyme', 'maribank'].forEach(method => {
       if (!appSettings.merchant[method]) appSettings.merchant[method] = {};
       appSettings.merchant[method].name = document.getElementById(`pay${cap(method)}Name`).value.trim();

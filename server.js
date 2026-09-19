@@ -90,7 +90,11 @@ const mailer = require('./mailer'); // Resend-backed transactional email (see ma
 const supabaseAdmin = require('./supabaseAdmin'); // Supabase Auth for staff accounts (see supabaseAdmin.js)
 
 const app = express();
-app.set('trust proxy', true); // Render sits behind a proxy; needed for correct req.protocol
+// Render sits behind exactly one proxy. `true` would trust the whole
+// X-Forwarded-For chain, which lets a caller forge req.ip and slip past the
+// rate limiter below by sending a fresh fake IP on every request. The hop
+// count is the correct setting: req.protocol still resolves properly.
+app.set('trust proxy', 1);
 // The `verify` callback stashes the raw request body on req.rawBody as it's
 // parsed, without changing anything else about normal JSON parsing. This is
 // needed for the PayMongo webhook route, which must HMAC-sign the *raw*
@@ -124,7 +128,17 @@ const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || '';
 // endpoints. Leave unset during local development.
 const ALLOWED_ORIGIN = process.env.ALLOWED_ORIGIN || '';
 
-const DEFAULT_ADMIN_PASSWORD = 'primusadmin2026'; // matches index.html's client-side default
+// The admin password now comes from the environment only. It used to be a
+// literal in this file that index.html carried a matching copy of — which
+// meant anyone reading the (public) repo could authenticate as admin against
+// the live site. There is deliberately no fallback value: if this is unset,
+// password auth is disabled entirely rather than silently reverting to a
+// known default. Set ADMIN_PASSWORD in the Render dashboard.
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '';
+if (!ADMIN_PASSWORD) {
+  console.warn('[auth] ADMIN_PASSWORD is not set — password-based admin login is DISABLED.');
+  console.warn('[auth] Set it in the Render dashboard, or sign in as an owner via Supabase (OWNER_EMAILS).');
+}
 
 // Owner accounts on Supabase (see supabaseAdmin.js / scripts/create-owner.js).
 // Comma-separated, case-insensitive. Anyone signed in through Supabase whose
@@ -149,7 +163,9 @@ function readState() {
     // index.html's own client-side defaults via Object.assign, the first
     // time nothing comes back from the server for those fields.
     return {
-      adminPassword: DEFAULT_ADMIN_PASSWORD,
+      // No adminPassword seeded here on purpose — auth reads ADMIN_PASSWORD
+      // from the environment. A seeded default would silently reappear every
+      // time this file is recreated (which, on an ephemeral disk, is often).
       members: {},
       bookings: [],
       merchant: { paymongoEnabled: false, xenditEnabled: false },
@@ -174,10 +190,22 @@ function writeState(state) {
 // `Authorization: Bearer <token>` — see docs/STAFF_ACCOUNTS.md). Async
 // because the Supabase check is a network call; every call site below
 // already awaits it.
+// Length-independent comparison. `===` on secrets leaks how many leading
+// characters matched via response timing; timingSafeEqual needs equal-length
+// buffers, so both sides are hashed to a fixed 32 bytes first.
+function secretsMatch(a, b) {
+  if (!a || !b) return false;
+  const ha = crypto.createHash('sha256').update(String(a)).digest();
+  const hb = crypto.createHash('sha256').update(String(b)).digest();
+  return crypto.timingSafeEqual(ha, hb);
+}
+
 async function requireAdmin(req, res, state) {
   const provided = req.get('x-admin-password') || '';
-  const actual = state.adminPassword || DEFAULT_ADMIN_PASSWORD;
-  if (provided && provided === actual) return true;
+  // state.adminPassword is honoured if an owner set one through the console,
+  // otherwise the environment value. Never a hardcoded literal.
+  const actual = state.adminPassword || ADMIN_PASSWORD;
+  if (actual && secretsMatch(provided, actual)) return true;
 
   if (OWNER_EMAILS.length && supabaseAdmin.isConfigured()) {
     const authHeader = req.get('authorization') || '';
@@ -268,6 +296,17 @@ function rateLimit({ windowMs, max }) {
 // 8 attempts per 15 minutes per IP — generous for a real customer retrying a
 // typo, tight enough to blunt a scripted flood of fake submissions.
 const paymentLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 8 });
+
+// Every privileged route re-checks the admin password on each request, so
+// without this an attacker can simply guess in a loop — there is no session
+// and no lockout anywhere else. 20 per 5 minutes is far more than a real
+// owner mistyping a password needs.
+const adminLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 20 });
+
+// /api/ai-chat spends real money per call on a third-party API. It was
+// previously open to anyone, unthrottled — a free LLM proxy billed to this
+// account.
+const aiLimiter = rateLimit({ windowMs: 5 * 60 * 1000, max: 30 });
 
 function generateMembershipNumber(members) {
   let memNum;
@@ -399,7 +438,7 @@ app.get('/api/state', (req, res) => {
   res.json(publicState);
 });
 
-app.post('/api/state', async (req, res) => {
+app.post('/api/state', adminLimiter, async (req, res) => {
   const state = readState();
   if (!(await requireAdmin(req, res, state))) return;
   const incoming = req.body || {};
@@ -457,7 +496,7 @@ app.post('/api/state', async (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/admin/state', async (req, res) => {
+app.get('/api/admin/state', adminLimiter, async (req, res) => {
   const state = readState();
   if (!(await requireAdmin(req, res, state))) return;
   const out = { ...state };
@@ -505,6 +544,16 @@ app.post('/api/staff/signup', checkOrigin, paymentLimiter, async (req, res) => {
   if (password.length < 6) {
     return res.status(400).json({ error: 'Password must be at least 6 characters.' });
   }
+  // Signup accepts bio/photo/faceDescriptor directly, so it needs the same
+  // checks the self-edit route applies — otherwise that validation is
+  // bypassed by simply setting the payload at registration instead.
+  const fieldProblem = validateStaffSelfEdit({
+    ...(bio !== undefined ? { bio } : {}),
+    ...(photo !== undefined ? { photo } : {}),
+    ...(faceDescriptor ? { faceDescriptor } : {}),
+  });
+  if (fieldProblem) return res.status(400).json({ error: fieldProblem });
+
   const human = await verifyTurnstile(turnstileToken, req.ip);
   if (!human) {
     return res.status(403).json({ error: 'Verification failed. Please refresh the page and try again.' });
@@ -558,20 +607,80 @@ app.post('/api/staff/signup', checkOrigin, paymentLimiter, async (req, res) => {
 // email, position, and approval stay admin-only (via the existing /api/state
 // route + Owner Console / Admin Settings, both still gated by the Admin
 // Password), exactly matching today's "can't touch your own name/email" rule.
-const STAFF_SELF_EDITABLE_FIELDS = ['status', 'bio', 'photo', 'supportPeerId', 'active', 'isLive', 'liveHeartbeat', 'liveSince', 'lastDeclineAt', 'faceDescriptor'];
+// `active` used to be in this list, which let a staff member an admin had
+// just deactivated flip themselves back on and reappear on the public team
+// page. Activation is an admin decision; it lives with `approved` now.
+const STAFF_SELF_EDITABLE_FIELDS = ['status', 'bio', 'photo', 'supportPeerId', 'isLive', 'liveHeartbeat', 'liveSince', 'lastDeclineAt', 'faceDescriptor'];
+
+const ALLOWED_STAFF_STATUSES = ['Active', 'Break', 'Lunch', 'Inactive'];
+
+// `photo` is rendered into an <img src> on the public homepage. Anyone can
+// self-register as a barber (barber signups are auto-approved), so without
+// this an attacker could store `x" onerror="...` here and run script in every
+// customer's browser. Only two shapes are ever legitimate: an https URL, or
+// an inline base64 image. Quotes and angle brackets can't occur in either.
+function isSafePhoto(value) {
+  if (typeof value !== 'string') return false;
+  if (value === '') return true; // clearing the photo is fine
+  if (value.length > 4 * 1024 * 1024) return false;
+  if (/["'<>\\\s]/.test(value)) return false;
+  if (/^data:image\/(png|jpeg|jpg|webp|gif);base64,[A-Za-z0-9+/=]+$/.test(value)) return true;
+  return /^https:\/\/[^"'<>\\]+$/.test(value);
+}
+
+// Rejects the whole request rather than silently dropping a bad field, so a
+// caller sending garbage finds out instead of believing it saved.
+function validateStaffSelfEdit(body) {
+  if (Object.prototype.hasOwnProperty.call(body, 'photo') && !isSafePhoto(body.photo)) {
+    return 'photo must be an https URL or an inline base64 image.';
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'bio')) {
+    if (typeof body.bio !== 'string' || body.bio.length > 2000) return 'bio must be text under 2000 characters.';
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'status') && !ALLOWED_STAFF_STATUSES.includes(body.status)) {
+    return `status must be one of: ${ALLOWED_STAFF_STATUSES.join(', ')}.`;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'supportPeerId')) {
+    if (typeof body.supportPeerId !== 'string' || !/^[A-Za-z0-9_-]{0,64}$/.test(body.supportPeerId)) {
+      return 'supportPeerId is not a valid peer id.';
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body, 'faceDescriptor') && body.faceDescriptor !== null) {
+    const d = body.faceDescriptor;
+    if (!Array.isArray(d) || d.length !== 128 || !d.every(n => typeof n === 'number' && Number.isFinite(n))) {
+      return 'faceDescriptor must be 128 finite numbers.';
+    }
+  }
+  for (const key of ['isLive']) {
+    if (Object.prototype.hasOwnProperty.call(body, key) && typeof body[key] !== 'boolean') {
+      return `${key} must be true or false.`;
+    }
+  }
+  for (const key of ['liveHeartbeat', 'liveSince', 'lastDeclineAt']) {
+    const v = body[key];
+    if (Object.prototype.hasOwnProperty.call(body, key) && v !== null && !Number.isFinite(v)) {
+      return `${key} must be a timestamp or null.`;
+    }
+  }
+  return null;
+}
 
 app.patch('/api/staff/me', requireStaffSelf, (req, res) => {
+  const body = req.body || {};
+  const problem = validateStaffSelfEdit(body);
+  if (problem) return res.status(400).json({ error: problem });
+
   const state = readState();
   const acct = (state.barberAccounts || []).find(a => a.id === req.staff.id);
   if (!acct) return res.status(404).json({ error: 'Account not found.' });
   for (const key of STAFF_SELF_EDITABLE_FIELDS) {
-    if (Object.prototype.hasOwnProperty.call(req.body || {}, key)) acct[key] = req.body[key];
+    if (Object.prototype.hasOwnProperty.call(body, key)) acct[key] = body[key];
   }
   writeState(state);
   res.json({ account: acct });
 });
 
-app.post('/api/staff/reset-password', async (req, res) => {
+app.post('/api/staff/reset-password', adminLimiter, async (req, res) => {
   const state = readState();
   if (!(await requireAdmin(req, res, state))) return;
   if (!supabaseAdmin.isConfigured()) {
@@ -586,7 +695,7 @@ app.post('/api/staff/reset-password', async (req, res) => {
     .catch(() => res.status(400).json({ error: 'Could not reset that password — this account may not have a Supabase login yet (created before Supabase was set up?).' }));
 });
 
-app.delete('/api/staff/:id', async (req, res) => {
+app.delete('/api/staff/:id', adminLimiter, async (req, res) => {
   const state = readState();
   if (!(await requireAdmin(req, res, state))) return;
   if (!supabaseAdmin.isConfigured()) return res.json({ ok: true }); // nothing to clean up
@@ -994,7 +1103,7 @@ app.post('/api/payments/xendit/webhook', (req, res) => {
 // AI chat (optional — falls back client-side if this errors or is unconfigured)
 // ---------------------------------------------------------------------------
 
-app.post('/api/ai-chat', async (req, res) => {
+app.post('/api/ai-chat', checkOrigin, aiLimiter, async (req, res) => {
   try {
     const { message, history, knowledgeBase } = req.body || {};
     if (!message || typeof message !== 'string') {

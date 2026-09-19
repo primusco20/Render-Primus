@@ -5272,7 +5272,9 @@
       templateId: 'template_qcou40j',
       barberResetTemplateId: ''
     },
-    adminPassword: 'primusadmin2026',
+    // No default password. The server is the only authority on admin access
+    // (see verifyAdminPassword below); a literal here was a published secret.
+    adminPassword: '',
     callWaitMinutes: 5,
     members: {
       'MEM-12345': { name: 'Sample User', email: 'sample@example.com', phone: '09171234567', paidDate: '2026-09-01', active: true },
@@ -6559,7 +6561,7 @@ let currentReviewBarber = '';
 
       const logoEl = document.getElementById('introSplashLogo');
       if (appSettings.brandLogo) {
-        logoEl.innerHTML = `<img src="${appSettings.brandLogo}" alt="${escapeAttr(appSettings.businessName || 'Logo')}">`;
+        logoEl.innerHTML = `<img src="${escapeAttr(appSettings.brandLogo)}" alt="${escapeAttr(appSettings.businessName || 'Logo')}">`;
       } else {
         logoEl.textContent = (appSettings.brandInitial || 'P').charAt(0).toUpperCase();
       }
@@ -7106,7 +7108,7 @@ let currentReviewBarber = '';
       details = m.genericQr || {};
       box.innerHTML = `
         <div style="font-size:0.72rem; color:var(--text-sub);">${(details.label || 'SCAN TO PAY').toUpperCase()}</div>
-        ${details.qrImage ? `<img src="${details.qrImage}" alt="Payment QR code" style="max-width:180px; width:100%; margin:8px auto; border-radius:10px; display:block;">` : `<p style="font-size:0.75rem; color:var(--text-sub);">The shop hasn't uploaded a QR code yet. Please choose another payment method or contact the shop directly.</p>`}
+        ${details.qrImage ? `<img src="${escapeAttr(details.qrImage)}" alt="Payment QR code" style="max-width:180px; width:100%; margin:8px auto; border-radius:10px; display:block;">` : `<p style="font-size:0.75rem; color:var(--text-sub);">The shop hasn't uploaded a QR code yet. Please choose another payment method or contact the shop directly.</p>`}
       `;
     } else {
       details = m[method] || {};
@@ -7115,7 +7117,7 @@ let currentReviewBarber = '';
         <div style="font-size:0.72rem; color:var(--text-sub);">SEND ${appSettings.currency}${appSettings.subscriptionAmount} VIA ${merchantLabel(method).toUpperCase()} TO</div>
         ${details.name ? `<div style="font-weight:700; font-size:1rem; margin-top:4px;">${details.name}</div>` : ''}
         ${details.number ? `<div class="receipt-num" style="font-size:1.2rem; margin:4px 0;">${details.number}</div>` : ''}
-        ${details.qrImage ? `<img src="${details.qrImage}" alt="${merchantLabel(method)} QR code" style="max-width:180px; width:100%; margin:8px auto; border-radius:10px; display:block;">` : ''}
+        ${details.qrImage ? `<img src="${escapeAttr(details.qrImage)}" alt="${merchantLabel(method)} QR code" style="max-width:180px; width:100%; margin:8px auto; border-radius:10px; display:block;">` : ''}
       ` : `<p style="font-size:0.75rem; color:var(--text-sub);">The shop hasn't set up ${merchantLabel(method)} yet. Please choose another payment method or contact the shop directly.</p>`;
     }
   }
@@ -7670,7 +7672,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       card.className = 'gallery-card glass glass-hover';
       card.innerHTML = `
         <div class="gallery-img-wrap">
-          <img src="${item.img}" alt="${item.title}">
+          <img src="${escapeAttr(item.img)}" alt="${escapeAttr(item.title)}">
         </div>
         <div class="gallery-info">
           <div class="gallery-title">${item.title}</div>
@@ -7789,7 +7791,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     const removeBtn = document.getElementById('adminBrandLogoRemoveBtn');
     if (!preview) return;
     if (dataUrl) {
-      preview.innerHTML = `<img src="${dataUrl}" alt="Logo" style="width:100%; height:100%; object-fit:cover;">`;
+      preview.innerHTML = `<img src="${escapeAttr(dataUrl)}" alt="Logo" style="width:100%; height:100%; object-fit:cover;">`;
       if (removeBtn) removeBtn.style.display = 'inline-flex';
     } else {
       preview.innerHTML = `<span style="font-size:0.6rem; color:var(--text-sub);">No logo</span>`;
@@ -7839,7 +7841,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     const removeBtn = document.getElementById(ids.removeBtn);
     if (!preview) return;
     if (dataUrl) {
-      preview.innerHTML = `<img src="${dataUrl}" alt="${merchantLabel(method)} logo" style="width:100%; height:100%; object-fit:contain;">`;
+      preview.innerHTML = `<img src="${escapeAttr(dataUrl)}" alt="${merchantLabel(method)} logo" style="width:100%; height:100%; object-fit:contain;">`;
       if (removeBtn) removeBtn.style.display = 'inline-flex';
     } else {
       preview.innerHTML = `<span style="font-size:0.55rem; color:#999;">No logo</span>`;
@@ -7905,7 +7907,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
     const removeBtn = document.getElementById(ids.removeBtn);
     if (!preview) return;
     if (dataUrlOrUrl) {
-      preview.innerHTML = `<img src="${dataUrlOrUrl}" alt="QR code" style="width:100%; height:100%; object-fit:contain;">`;
+      preview.innerHTML = `<img src="${escapeAttr(dataUrlOrUrl)}" alt="QR code" style="width:100%; height:100%; object-fit:contain;">`;
       if (removeBtn) removeBtn.style.display = 'inline-flex';
     } else {
       preview.innerHTML = `<span style="font-size:0.5rem; color:#999;">No QR</span>`;
@@ -7943,7 +7945,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       // sizing that let oversized logos overflow their button. See the
       // .pm-logo-box CSS comment for the full explanation.
       slot.innerHTML = details.logoImage
-        ? `<span class="pm-logo-box"><img src="${details.logoImage}" alt="${merchantLabel(method)}"></span>`
+        ? `<span class="pm-logo-box"><img src="${escapeAttr(details.logoImage)}" alt="${merchantLabel(method)}"></span>`
         : PM_DEFAULT_BADGE_HTML[method];
     });
     updatePaymentMethodChooserVisibility();
@@ -8087,7 +8089,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       const row = document.createElement('div');
       row.style.cssText = 'display:flex; gap:10px; align-items:flex-start; background:var(--input-bg); border:1px solid var(--glass-border); border-radius:12px; padding:8px;';
       row.innerHTML = `
-        <img src="${item.img}" alt="" style="width:64px; height:64px; object-fit:cover; border-radius:8px; flex-shrink:0; background:var(--glass-bg);">
+        <img src="${escapeAttr(item.img)}" alt="" style="width:64px; height:64px; object-fit:cover; border-radius:8px; flex-shrink:0; background:var(--glass-bg);">
         <div style="flex:1; display:flex; flex-direction:column; gap:4px; min-width:0;">
           <input type="text" value="${escapeAttr(item.title)}" placeholder="Title" oninput="updateGalleryField(${idx}, 'title', this.value)" style="font-size:16px;">
           <input type="text" value="${escapeAttr(item.desc)}" placeholder="Short caption" oninput="updateGalleryField(${idx}, 'desc', this.value)" style="font-size:16px;">
@@ -8449,7 +8451,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       card.style.cursor = 'pointer';
       card.title = `Book an appointment with ${b.name}`;
       const photo = b.photo
-        ? `<img src="${b.photo}" alt="${escapeAttr(b.name)}">`
+        ? `<img src="${escapeAttr(b.photo)}" alt="${escapeAttr(b.name)}">`
         : `<div class="team-photo-fallback">${escapeAttr((b.name || '?').charAt(0).toUpperCase())}</div>`;
       const stats = getBarberRatingStats(b.name);
       const ratingHtml = stats.count > 0
@@ -10037,7 +10039,7 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
 
     const brandMarkEl = document.getElementById('brandMark');
     if (appSettings.brandLogo) {
-      brandMarkEl.innerHTML = `<img src="${appSettings.brandLogo}" alt="${escapeAttr(appSettings.businessName || 'Logo')}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">`;
+      brandMarkEl.innerHTML = `<img src="${escapeAttr(appSettings.brandLogo)}" alt="${escapeAttr(appSettings.businessName || 'Logo')}" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">`;
     } else {
       brandMarkEl.innerText = (appSettings.brandInitial || 'P').charAt(0).toUpperCase();
     }
@@ -10591,7 +10593,11 @@ document.querySelectorAll('.progress-steps .step-node').forEach((node, idx) => {
       } catch (e) { /* fall through to local check below */ }
     }
 
-    if (pwd === appSettings.adminPassword) {
+    // Offline fallback. Only usable if an admin password was already cached
+    // locally from a successful server login — never against a built-in
+    // default, and never against an empty value, both of which previously
+    // let anyone open the admin UI when the server check failed or threw.
+    if (pwd && appSettings.adminPassword && pwd === appSettings.adminPassword) {
       closeAdminPasswordModal();
       showAdminHeaderBadge();
       openAdminModal();
